@@ -36,6 +36,20 @@ export const PRIORITY_BADGE: Record<string, { label: string; className: string }
   low: { label: 'Low', className: 'bg-blue-500/10 text-blue-400 border-blue-500/20' },
 };
 
+function extractUserDescription(request: DevRequest): string {
+  const desc = request.description;
+  // New format: user text before "---" separator
+  const dashSplit = desc.split('\n---\n');
+  if (dashSplit.length > 1) return dashSplit[0].trim();
+  // Old format: extract from "## Description\n" section
+  const descMatch = desc.match(/## Description\n([\s\S]*?)(?:\n##|$)/);
+  if (descMatch) return descMatch[1].trim();
+  // Fallback: if starts with "## Dev Capture Context", use the title
+  if (desc.startsWith('## Dev Capture Context')) return request.title;
+  // Plain text
+  return desc.trim();
+}
+
 interface RequestListProps {
   onSelect: (id: string) => void;
 }
@@ -162,7 +176,7 @@ function CompactRequestCard({
     >
       {/* Description preview — first 2 lines */}
       <div className="text-[12px] mb-1.5 leading-relaxed" style={{ color: '#e2e8f0', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-        {request.description.split('\n---\n')[0].trim() || request.title}
+        {extractUserDescription(request) || request.title}
       </div>
       {/* Badges row */}
       <div className="flex flex-wrap items-center gap-1.5">

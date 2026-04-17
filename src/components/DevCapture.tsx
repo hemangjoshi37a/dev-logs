@@ -268,7 +268,6 @@ const DevCapture: React.FC<DevCaptureProps> = ({ open, onClose, apiUrl }) => {
   const [screenshotCollapsed, setScreenshotCollapsed] = useState(false);
 
   // Form
-  const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<Priority>('medium');
   const [category, setCategory] = useState<Category>('bug');
@@ -312,7 +311,6 @@ const DevCapture: React.FC<DevCaptureProps> = ({ open, onClose, apiUrl }) => {
     if (!open) return;
     setCapturing(true);
     setSubmitted(false);
-    setTitle('');
     setDescription('');
     setPriority('medium');
     setCategory('bug');
@@ -551,10 +549,12 @@ const DevCapture: React.FC<DevCaptureProps> = ({ open, onClose, apiUrl }) => {
 
   // Submit
   const handleSubmit = async () => {
-    if (!title.trim()) {
-      toast.error('Please provide a title');
+    if (!description.trim()) {
+      toast.error('Please provide a description');
       return;
     }
+
+    const autoTitle = description.trim().split('\n')[0].slice(0, 80) || 'New request';
 
     setSubmitting(true);
     try {
@@ -592,7 +592,7 @@ const DevCapture: React.FC<DevCaptureProps> = ({ open, onClose, apiUrl }) => {
       ].filter(Boolean).join('\n');
 
       const body = {
-        title: title.trim(),
+        title: autoTitle,
         description: contextBlock,
         priority,
         category: category === 'ui-ux' ? 'ui' : category,
@@ -998,16 +998,6 @@ const DevCapture: React.FC<DevCaptureProps> = ({ open, onClose, apiUrl }) => {
             </div>
           )}
 
-          {/* Title */}
-          <div>
-            <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6, display: 'block', fontWeight: 500 }}>Title *</label>
-            <input type="text" value={title} onChange={(e) => setTitle(e.target.value)}
-              placeholder="Brief summary of the issue or improvement..."
-              className="dc-input"
-              style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid rgba(51,65,85,0.5)', background: 'rgba(15,23,42,0.7)', color: '#e2e8f0', fontSize: 13, outline: 'none', transition: 'border-color 0.15s, box-shadow 0.15s' }}
-              autoFocus />
-          </div>
-
           {/* Description */}
           <div>
             <label style={{ fontSize: 12, color: '#94a3b8', marginBottom: 6, display: 'block', fontWeight: 500 }}>Description</label>
@@ -1059,19 +1049,19 @@ const DevCapture: React.FC<DevCaptureProps> = ({ open, onClose, apiUrl }) => {
               <span style={{ color: '#22c55e', fontSize: 15, fontWeight: 600 }}>Request submitted!</span>
             </div>
           ) : (
-            <button onClick={handleSubmit} disabled={submitting || !title.trim()}
+            <button onClick={handleSubmit} disabled={submitting || !description.trim()}
               style={{
                 width: '100%', padding: '11px 0', borderRadius: 10, border: 'none',
-                cursor: submitting || !title.trim() ? 'not-allowed' : 'pointer',
+                cursor: submitting || !description.trim() ? 'not-allowed' : 'pointer',
                 fontSize: 14, fontWeight: 600,
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                background: submitting || !title.trim() ? 'rgba(51,65,85,0.4)' : 'linear-gradient(135deg, #0891b2, #06b6d4, #22d3ee)',
-                color: submitting || !title.trim() ? '#64748b' : '#ffffff',
-                boxShadow: submitting || !title.trim() ? 'none' : '0 4px 16px rgba(6,182,212,0.25)',
+                background: submitting || !description.trim() ? 'rgba(51,65,85,0.4)' : 'linear-gradient(135deg, #0891b2, #06b6d4, #22d3ee)',
+                color: submitting || !description.trim() ? '#64748b' : '#ffffff',
+                boxShadow: submitting || !description.trim() ? 'none' : '0 4px 16px rgba(6,182,212,0.25)',
                 transition: 'all 0.2s ease',
-                opacity: submitting || !title.trim() ? 0.6 : 1,
+                opacity: submitting || !description.trim() ? 0.6 : 1,
               }}
-              onMouseEnter={(e) => { if (!submitting && title.trim()) { e.currentTarget.style.transform = 'translateY(-1px)'; } }}
+              onMouseEnter={(e) => { if (!submitting && description.trim()) { e.currentTarget.style.transform = 'translateY(-1px)'; } }}
               onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}>
               {submitting ? (<><Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> Submitting...</>) : (<><Send size={15} /> Submit to Dev Logs</>)}
             </button>
