@@ -1,5 +1,5 @@
 {
-  "name": "dev-logs",
+  "name": "@hemangjoshi37a/dev-logs",
   "version": "1.0.0",
   "description": "AI-centric dev submission and tracking platform — capture bugs, features, and improvements with rich context",
   "type": "module",

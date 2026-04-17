@@ -10,6 +10,13 @@
 </p>
 
 <p align="center">
+  <a href="https://www.npmjs.com/package/@hemangjoshi37a/dev-logs"><img src="https://img.shields.io/npm/v/@hemangjoshi37a/dev-logs?color=22d3ee&label=npm&style=flat-square" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@hemangjoshi37a/dev-logs"><img src="https://img.shields.io/npm/dm/@hemangjoshi37a/dev-logs?color=a855f7&style=flat-square" alt="npm downloads" /></a>
+  <a href="https://github.com/hemangjoshi37a/dev-logs"><img src="https://img.shields.io/github/stars/hemangjoshi37a/dev-logs?color=f59e0b&style=flat-square" alt="GitHub stars" /></a>
+  <a href="https://github.com/hemangjoshi37a/dev-logs/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/@hemangjoshi37a/dev-logs?color=22c55e&style=flat-square" alt="license" /></a>
+</p>
+
+<p align="center">
   <a href="#features">Features</a> •
   <a href="#screenshots">Screenshots</a> •
   <a href="#quick-start">Quick Start</a> •
@@ -18,6 +25,20 @@
   <a href="#api">API</a> •
   <a href="#license">License</a>
 </p>
+
+<br/>
+
+<div align="center">
+
+```bash
+npx @hemangjoshi37a/dev-logs
+```
+
+**One command. Zero config. Instant bug tracking.**
+
+</div>
+
+<br/>
 
 ---
 
@@ -75,7 +96,7 @@ Full-screen overlay with Screenshot, Element Picker, Snip Area, and Annotate mod
 ### One command — that's it
 
 ```bash
-npx dev-logs
+npx @hemangjoshi37a/dev-logs
 ```
 
 Opens the dev-logs server at **http://localhost:4445** — dashboard, API, and overlay all in one.
@@ -83,15 +104,15 @@ Opens the dev-logs server at **http://localhost:4445** — dashboard, API, and o
 ### Options
 
 ```bash
-npx dev-logs --port 5000          # Custom port
-npx dev-logs --data ./my-data     # Custom data directory
-npx dev-logs --help               # Show all options
+npx @hemangjoshi37a/dev-logs --port 5000          # Custom port
+npx @hemangjoshi37a/dev-logs --data ./my-data     # Custom data directory
+npx @hemangjoshi37a/dev-logs --help               # Show all options
 ```
 
 ### Install globally (optional)
 
 ```bash
-npm install -g dev-logs
+npm install -g @hemangjoshi37a/dev-logs
 dev-logs
 ```
 
