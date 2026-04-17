@@ -68,13 +68,15 @@ export default function FloatingPanel({ isOpen, onClose, onOpenCapture }: Floati
   const [isMinimized, setIsMinimized] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>(saved.activeTab ?? 'submit');
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
-  const [position, setPosition] = useState(() => {
-    if (saved.position) return saved.position;
-    return { x: window.innerWidth - DEFAULT_WIDTH - 20, y: window.innerHeight - DEFAULT_HEIGHT - 80 };
-  });
   const [size, setSize] = useState(() => {
     if (saved.size) return clampSize(saved.size.width, saved.size.height);
     return { width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
+  });
+  const [position, setPosition] = useState(() => {
+    if (saved.position) return clampPosition(saved.position.x, saved.position.y, size.width, size.height);
+    const x = Math.max(20, window.innerWidth - DEFAULT_WIDTH - 20);
+    const y = Math.max(20, window.innerHeight - DEFAULT_HEIGHT - 80);
+    return { x, y };
   });
 
   // Dragging
@@ -84,6 +86,23 @@ export default function FloatingPanel({ isOpen, onClose, onOpenCapture }: Floati
   // Resizing
   const [resizing, setResizing] = useState<ResizeEdge>(null);
   const resizeStart = useRef({ x: 0, y: 0, width: 0, height: 0, px: 0, py: 0 });
+
+  // Re-clamp on window resize
+  useEffect(() => {
+    const onResize = () => {
+      setSize(prev => clampSize(prev.width, prev.height));
+      setPosition(prev => clampPosition(prev.x, prev.y, size.width, size.height));
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [size.width, size.height]);
+
+  // Re-clamp when panel opens
+  useEffect(() => {
+    if (isOpen) {
+      setPosition(prev => clampPosition(prev.x, prev.y, size.width, size.height));
+    }
+  }, [isOpen, size.width, size.height]);
 
   // Persist position/size/tab
   useEffect(() => {
@@ -176,16 +195,16 @@ export default function FloatingPanel({ isOpen, onClose, onOpenCapture }: Floati
   const EDGE_SIZE = 8;
 
   const edgeStyle = (edge: ResizeEdge): React.CSSProperties => {
-    const base: React.CSSProperties = { position: 'absolute', zIndex: 2 };
+    const base: React.CSSProperties = { position: 'absolute', zIndex: 100 };
     switch (edge) {
-      case 'n': return { ...base, top: 0, left: EDGE_SIZE, right: EDGE_SIZE, height: EDGE_SIZE, cursor: 'ns-resize' };
-      case 's': return { ...base, bottom: 0, left: EDGE_SIZE, right: EDGE_SIZE, height: EDGE_SIZE, cursor: 'ns-resize' };
-      case 'e': return { ...base, right: 0, top: EDGE_SIZE, bottom: EDGE_SIZE, width: EDGE_SIZE, cursor: 'ew-resize' };
-      case 'w': return { ...base, left: 0, top: EDGE_SIZE, bottom: EDGE_SIZE, width: EDGE_SIZE, cursor: 'ew-resize' };
-      case 'ne': return { ...base, top: 0, right: 0, width: EDGE_SIZE * 2, height: EDGE_SIZE * 2, cursor: 'nesw-resize' };
-      case 'nw': return { ...base, top: 0, left: 0, width: EDGE_SIZE * 2, height: EDGE_SIZE * 2, cursor: 'nwse-resize' };
-      case 'se': return { ...base, bottom: 0, right: 0, width: EDGE_SIZE * 2, height: EDGE_SIZE * 2, cursor: 'nwse-resize' };
-      case 'sw': return { ...base, bottom: 0, left: 0, width: EDGE_SIZE * 2, height: EDGE_SIZE * 2, cursor: 'nesw-resize' };
+      case 'n': return { ...base, top: -4, left: EDGE_SIZE, right: EDGE_SIZE, height: EDGE_SIZE, cursor: 'ns-resize' };
+      case 's': return { ...base, bottom: -4, left: EDGE_SIZE, right: EDGE_SIZE, height: EDGE_SIZE, cursor: 'ns-resize' };
+      case 'e': return { ...base, right: -4, top: EDGE_SIZE, bottom: EDGE_SIZE, width: EDGE_SIZE, cursor: 'ew-resize' };
+      case 'w': return { ...base, left: -4, top: EDGE_SIZE, bottom: EDGE_SIZE, width: EDGE_SIZE, cursor: 'ew-resize' };
+      case 'ne': return { ...base, top: -4, right: -4, width: EDGE_SIZE * 2, height: EDGE_SIZE * 2, cursor: 'nesw-resize' };
+      case 'nw': return { ...base, top: -4, left: -4, width: EDGE_SIZE * 2, height: EDGE_SIZE * 2, cursor: 'nwse-resize' };
+      case 'se': return { ...base, bottom: -4, right: -4, width: EDGE_SIZE * 2, height: EDGE_SIZE * 2, cursor: 'nwse-resize' };
+      case 'sw': return { ...base, bottom: -4, left: -4, width: EDGE_SIZE * 2, height: EDGE_SIZE * 2, cursor: 'nesw-resize' };
       default: return base;
     }
   };
@@ -210,24 +229,26 @@ export default function FloatingPanel({ isOpen, onClose, onOpenCapture }: Floati
           }
           exit={{ opacity: 0, scale: 0.92, y: 20 }}
           transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+          data-dev-logs-panel
           style={{
             position: 'fixed',
             left: position.x,
             top: position.y,
             width: size.width,
             zIndex: Z_INDEX,
-            overflow: 'hidden',
+            overflow: 'visible',
           }}
           className="rounded-xl shadow-2xl flex flex-col"
         >
           {/* Panel background */}
           <div
-            className="absolute inset-0 rounded-xl"
+            className="absolute inset-0 rounded-xl pointer-events-none"
             style={{
               background: 'rgba(10, 15, 30, 0.97)',
               backdropFilter: 'blur(20px)',
               border: '1px solid rgba(6, 182, 212, 0.12)',
               boxShadow: '0 25px 60px rgba(0, 0, 0, 0.6)',
+              zIndex: 0,
             }}
           />
 
@@ -248,6 +269,7 @@ export default function FloatingPanel({ isOpen, onClose, onOpenCapture }: Floati
               cursor: dragging ? 'grabbing' : 'grab',
               borderBottom: '1px solid rgba(6, 182, 212, 0.08)',
               background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.04) 0%, transparent 100%)',
+              zIndex: 1,
             }}
           >
             {/* Left: icon + title */}
@@ -309,7 +331,7 @@ export default function FloatingPanel({ isOpen, onClose, onOpenCapture }: Floati
 
           {/* Body */}
           {!isMinimized && (
-            <div className="relative flex-1 overflow-hidden" style={{ minHeight: 0 }}>
+            <div className="relative flex-1 overflow-hidden" style={{ minHeight: 0, zIndex: 1 }}>
               {activeTab === 'submit' && (
                 <SubmitTab
                   onOpenCapture={onOpenCapture}

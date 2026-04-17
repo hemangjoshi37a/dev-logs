@@ -56,9 +56,7 @@ export default function RequestList({ onSelect }: RequestListProps) {
   if (search.trim()) {
     const q = search.toLowerCase();
     filtered = filtered.filter(
-      (r) =>
-        r.title.toLowerCase().includes(q) ||
-        r.description.toLowerCase().includes(q),
+      (r) => r.description.toLowerCase().includes(q),
     );
   }
 
@@ -162,23 +160,21 @@ function CompactRequestCard({
       onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(6,182,212,0.2)'; e.currentTarget.style.background = 'rgba(15,23,42,0.6)'; }}
       onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(51,65,85,0.3)'; e.currentTarget.style.background = 'rgba(15,23,42,0.4)'; }}
     >
-      {/* Title */}
-      <div className="text-[12px] font-semibold truncate mb-1.5" style={{ color: '#e2e8f0' }}>
-        {request.title}
+      {/* Description preview — first 2 lines */}
+      <div className="text-[12px] mb-1.5 leading-relaxed" style={{ color: '#e2e8f0', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+        {request.description.split('\n---\n')[0].trim() || request.title}
       </div>
       {/* Badges row */}
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className={cn('text-[9px] font-medium px-1.5 py-0.5 rounded border', statusBadge.className)}>
-          {statusBadge.label}
-        </span>
         <span className={cn('text-[9px] font-medium px-1.5 py-0.5 rounded border', priorityBadge.className)}>
           {priorityBadge.label}
         </span>
-        {checklistTotal > 0 && (
-          <span className="text-[9px] flex items-center gap-0.5" style={{ color: '#64748b' }}>
-            <CheckCircle2 size={8} /> {checklistDone}/{checklistTotal}
-          </span>
-        )}
+        <span className="text-[9px] font-medium px-1.5 py-0.5 rounded" style={{ color: '#64748b', background: 'rgba(30,41,59,0.5)', border: '1px solid rgba(51,65,85,0.3)' }}>
+          {request.category}
+        </span>
+        <span className={cn('text-[9px] font-medium px-1.5 py-0.5 rounded border', statusBadge.className)}>
+          {statusBadge.label}
+        </span>
         <span className="text-[9px] ml-auto" style={{ color: '#475569' }}>
           {new Date(request.created_at).toLocaleDateString()}
         </span>

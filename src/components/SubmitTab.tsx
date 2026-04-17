@@ -13,6 +13,7 @@ import {
   ChevronUp,
   X,
   AlertTriangle,
+  Crosshair,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { createRequest, uploadAttachment } from '../lib/api';
@@ -88,7 +89,6 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
   const [screenshotData, setScreenshotData] = useState('');
   const [capturing, setCapturing] = useState(false);
   const [screenshotCollapsed, setScreenshotCollapsed] = useState(false);
-  const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<Priority>('medium');
   const [category, setCategory] = useState<Category>('bug');
@@ -110,8 +110,8 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
   }, []);
 
   const handleSubmit = async () => {
-    if (!title.trim()) {
-      toast.error('Please provide a title');
+    if (!description.trim()) {
+      toast.error('Please describe the issue');
       return;
     }
 
@@ -119,23 +119,25 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
     try {
       const consoleLogs = ((window as any).__consoleBuffer as ConsoleEntry[] || []).slice(-50);
 
+      // Auto-generate title from first 80 chars of description
+      const autoTitle = description.trim().split('\n')[0].slice(0, 80) || 'New request';
+
       const contextBlock = [
-        `## Dev Capture Context`,
-        `- **Page**: \`${pageUrl}\``,
-        `- **Browser**: ${navigator.userAgent.slice(0, 100)}`,
-        `- **Viewport**: ${window.innerWidth}x${window.innerHeight}`,
-        `- **Console Errors**: ${consoleErrors}`,
-        `- **Console Warnings**: ${consoleWarnings}`,
-        `- **Timestamp**: ${new Date().toISOString()}`,
+        description.trim(),
         '',
-        description ? `## Description\n${description}` : '',
+        `---`,
+        `**Page**: \`${pageUrl}\`  |  **Viewport**: ${window.innerWidth}x${window.innerHeight}`,
+        `**Browser**: ${navigator.userAgent.slice(0, 100)}`,
+        `**Timestamp**: ${new Date().toISOString()}`,
+        consoleErrors > 0 ? `**Console Errors**: ${consoleErrors}` : '',
+        consoleWarnings > 0 ? `**Console Warnings**: ${consoleWarnings}` : '',
         consoleLogs.length > 0
-          ? `\n## Recent Console Logs\n\`\`\`\n${consoleLogs.map((l) => `[${l.level}] ${l.message}`).join('\n')}\n\`\`\``
+          ? `\n**Console Logs**:\n\`\`\`\n${consoleLogs.map((l) => `[${l.level}] ${l.message}`).join('\n')}\n\`\`\``
           : '',
       ].filter(Boolean).join('\n');
 
       const body = {
-        title: title.trim(),
+        title: autoTitle,
         description: contextBlock,
         priority,
         category: (category === 'ui-ux' ? 'ui' : category) as Category,
@@ -168,7 +170,6 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
   const handleReset = () => {
     setSubmitted(false);
     setSubmittedId(null);
-    setTitle('');
     setDescription('');
     setScreenshotData('');
     setPriority('medium');
@@ -225,26 +226,40 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
           )}
         </div>
 
-        {/* Screenshot capture */}
-        <button
-          onClick={handleCapture}
-          disabled={capturing}
-          className="w-full flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-medium transition-colors"
-          style={{
-            background: screenshotData ? 'rgba(34,197,94,0.08)' : 'rgba(15,23,42,0.7)',
-            border: `1px solid ${screenshotData ? 'rgba(34,197,94,0.25)' : 'rgba(51,65,85,0.5)'}`,
-            color: screenshotData ? '#22c55e' : '#94a3b8',
-            cursor: capturing ? 'wait' : 'pointer',
-          }}
-        >
-          {capturing ? (
-            <><Loader2 size={13} className="animate-spin" /> Capturing...</>
-          ) : screenshotData ? (
-            <><Camera size={13} /> Re-capture Screenshot</>
-          ) : (
-            <><Camera size={13} /> Capture Screenshot</>
-          )}
-        </button>
+        {/* Screenshot & advanced capture */}
+        <div className="flex gap-1.5">
+          <button
+            onClick={handleCapture}
+            disabled={capturing}
+            className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-medium transition-colors"
+            style={{
+              background: screenshotData ? 'rgba(34,197,94,0.08)' : 'rgba(15,23,42,0.7)',
+              border: `1px solid ${screenshotData ? 'rgba(34,197,94,0.25)' : 'rgba(51,65,85,0.5)'}`,
+              color: screenshotData ? '#22c55e' : '#94a3b8',
+              cursor: capturing ? 'wait' : 'pointer',
+            }}
+          >
+            {capturing ? (
+              <><Loader2 size={13} className="animate-spin" /> Capturing...</>
+            ) : screenshotData ? (
+              <><Camera size={13} /> Re-capture</>
+            ) : (
+              <><Camera size={13} /> Screenshot</>
+            )}
+          </button>
+          <button
+            onClick={onOpenCapture}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors"
+            style={{
+              background: 'rgba(15,23,42,0.7)',
+              border: '1px solid rgba(51,65,85,0.5)',
+              color: '#94a3b8',
+            }}
+            title="Advanced capture: element picker, snip area, annotate"
+          >
+            <Crosshair size={13} /> Advanced
+          </button>
+        </div>
 
         {/* Screenshot preview */}
         {screenshotData && (
@@ -281,33 +296,14 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
           </div>
         )}
 
-        {/* Title */}
-        <div>
-          <label className="text-[11px] font-medium mb-1.5 block" style={{ color: '#94a3b8' }}>Title *</label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Brief summary..."
-            className="w-full px-3 py-2 rounded-lg text-[13px] outline-none transition-all"
-            style={{
-              background: 'rgba(15,23,42,0.7)',
-              border: '1px solid rgba(51,65,85,0.5)',
-              color: '#e2e8f0',
-            }}
-            onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(6,182,212,0.5)'; }}
-            onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(51,65,85,0.5)'; }}
-          />
-        </div>
-
         {/* Description */}
         <div>
-          <label className="text-[11px] font-medium mb-1.5 block" style={{ color: '#94a3b8' }}>Description</label>
+          <label className="text-[11px] font-medium mb-1.5 block" style={{ color: '#94a3b8' }}>What needs to be done? *</label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Describe the issue..."
-            rows={3}
+            placeholder="Describe the bug, improvement, or feature request in plain text..."
+            rows={5}
             className="w-full px-3 py-2 rounded-lg text-[13px] outline-none transition-all resize-none font-[inherit]"
             style={{
               background: 'rgba(15,23,42,0.7)',
@@ -379,17 +375,17 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
       >
         <button
           onClick={handleSubmit}
-          disabled={submitting || !title.trim()}
+          disabled={submitting || !description.trim()}
           className="w-full py-2.5 rounded-lg text-[13px] font-semibold flex items-center justify-center gap-2 transition-all"
           style={{
-            background: submitting || !title.trim()
+            background: submitting || !description.trim()
               ? 'rgba(51,65,85,0.4)'
               : 'linear-gradient(135deg, #0891b2, #06b6d4, #22d3ee)',
-            color: submitting || !title.trim() ? '#64748b' : '#ffffff',
+            color: submitting || !description.trim() ? '#64748b' : '#ffffff',
             border: 'none',
-            cursor: submitting || !title.trim() ? 'not-allowed' : 'pointer',
-            opacity: submitting || !title.trim() ? 0.6 : 1,
-            boxShadow: submitting || !title.trim() ? 'none' : '0 4px 16px rgba(6,182,212,0.25)',
+            cursor: submitting || !description.trim() ? 'not-allowed' : 'pointer',
+            opacity: submitting || !description.trim() ? 0.6 : 1,
+            boxShadow: submitting || !description.trim() ? 'none' : '0 4px 16px rgba(6,182,212,0.25)',
           }}
         >
           {submitting ? (
