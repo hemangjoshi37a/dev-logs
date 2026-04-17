@@ -1,6 +1,6 @@
 {
   "name": "@hemangjoshi37a/dev-logs",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AI-centric dev submission and tracking platform — capture bugs, features, and improvements with rich context",
   "type": "module",
   "bin": {
