@@ -72,33 +72,45 @@ Full-screen overlay with Screenshot, Element Picker, Snip Area, and Annotate mod
 
 ## Quick Start
 
-### Prerequisites
-- **Node.js** 18+ and npm
-- That's it. No database, no external services.
-
-### Install & Run
+### One command — that's it
 
 ```bash
-# Clone the repo
+npx dev-logs
+```
+
+Opens the dev-logs server at **http://localhost:4445** — dashboard, API, and overlay all in one.
+
+### Options
+
+```bash
+npx dev-logs --port 5000          # Custom port
+npx dev-logs --data ./my-data     # Custom data directory
+npx dev-logs --help               # Show all options
+```
+
+### Install globally (optional)
+
+```bash
+npm install -g dev-logs
+dev-logs
+```
+
+### From source (for development)
+
+```bash
 git clone https://github.com/hemangjoshi37a/dev-logs.git
 cd dev-logs
-
-# Install dependencies
 npm install
-
-# Start dev server (frontend + backend)
-npm run dev
-
-# Frontend: http://localhost:4444
-# Backend API: http://localhost:4445
+npm run dev    # Frontend on :4444, Backend on :4445
 ```
 
 ### First Run
-1. Click the purple bug button (bottom-right) or press `Ctrl+D`
-2. Describe your issue, set priority/category
-3. Optionally capture a screenshot or attach files
-4. Click "Submit to Dev Logs"
-5. Switch to the "Requests" tab to view and manage submissions
+1. Open **http://localhost:4445** in your browser
+2. Click the purple bug button (bottom-right) or press `Ctrl+D`
+3. Describe your issue, set priority/category
+4. Optionally capture a screenshot or attach files
+5. Click "Submit to Dev Logs"
+6. Switch to the "Requests" tab to view and manage submissions
 
 ## Integration
 
@@ -117,7 +129,7 @@ The floating bug button appears at the bottom-right. Press **Ctrl+D** to open th
 
 Simply remove the `<script>` tag — zero footprint in production.
 
-### Environment-based injection
+### Auto-inject only in development
 
 ```html
 <script>
@@ -127,6 +139,23 @@ Simply remove the `<script>` tag — zero footprint in production.
     document.head.appendChild(s);
   }
 </script>
+```
+
+### Vite plugin (one-liner)
+
+```js
+// vite.config.ts
+export default defineConfig({
+  plugins: [
+    {
+      name: 'dev-logs',
+      transformIndexHtml: (html) =>
+        process.env.NODE_ENV !== 'production'
+          ? html.replace('</head>', '<script src="http://localhost:4445/overlay.js"></script></head>')
+          : html,
+    },
+  ],
+});
 ```
 
 ## Architecture

@@ -12,9 +12,9 @@ const __dirname = path.dirname(__filename);
 const router = Router();
 
 // ---------------------------------------------------------------------------
-// Data file paths
+// Data file paths — configurable via DEV_LOGS_DATA_DIR env var
 // ---------------------------------------------------------------------------
-const DATA_DIR = path.join(__dirname, '..', 'data');
+const DATA_DIR = process.env.DEV_LOGS_DATA_DIR || path.join(__dirname, '..', 'data');
 const REQUESTS_FILE = path.join(DATA_DIR, 'requests.json');
 const CHANGELOG_FILE = path.join(DATA_DIR, 'changelog.json');
 const ATTACHMENTS_DIR = path.join(DATA_DIR, 'attachments');

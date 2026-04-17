@@ -7,3 +7,5 @@ server/data/attachments/
 
 server/data/*.json
 
+.dev-logs/
+dist/

@@ -3,15 +3,49 @@
   "version": "1.0.0",
   "description": "AI-centric dev submission and tracking platform — capture bugs, features, and improvements with rich context",
   "type": "module",
+  "bin": {
+    "dev-logs": "./bin/dev-logs.mjs"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:client": "vite",
     "dev:server": "tsx watch server/index.ts",
-    "build": "vite build",
+    "build": "npm run build:client && npm run build:server && npm run build:overlay",
+    "build:client": "vite build --outDir dist/client",
+    "build:server": "tsx server/build.ts",
     "build:overlay": "vite build --config vite.overlay.config.ts",
     "preview": "vite preview",
-    "start": "node dist/server/index.js"
+    "start": "node bin/dev-logs.mjs",
+    "prepublishOnly": "npm run build"
   },
+  "keywords": [
+    "dev-tools",
+    "bug-tracking",
+    "bug-report",
+    "screenshot-capture",
+    "developer-tools",
+    "issue-tracker",
+    "floating-widget",
+    "ai-ready",
+    "context-capture",
+    "console-logs"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hemangjoshi37a/dev-logs.git"
+  },
+  "homepage": "https://github.com/hemangjoshi37a/dev-logs",
+  "bugs": {
+    "url": "https://github.com/hemangjoshi37a/dev-logs/issues"
+  },
+  "author": "Hemang Joshi <hemangjoshi37a@gmail.com> (https://hjlabs.in)",
+  "license": "MIT",
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-dropdown-menu": "^2.1.6",
@@ -45,6 +79,7 @@
     "@vitejs/plugin-react-swc": "^4.0.0",
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.1.2",
+    "esbuild": "^0.25.12",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.19.4",
