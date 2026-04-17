@@ -140,13 +140,45 @@ export function installConsoleInterceptor() {
 async function captureScreenshot(): Promise<string> {
   try {
     const { toPng } = await import('html-to-image');
-    return await toPng(document.body, {
+
+    // Hide ALL overlay elements before capture
+    const selectors = [
+      '.dev-capture-overlay',        // The DevCapture overlay itself
+      '[data-dev-logs-panel]',        // Floating panel
+      '[data-dev-logs-button]',       // Bug button
+    ];
+    const hidden: HTMLElement[] = [];
+    for (const sel of selectors) {
+      document.querySelectorAll(sel).forEach((el) => {
+        const htmlEl = el as HTMLElement;
+        if (htmlEl.style.display !== 'none') {
+          hidden.push(htmlEl);
+          htmlEl.style.display = 'none';
+        }
+      });
+    }
+
+    // Wait for repaint
+    await new Promise((r) => setTimeout(r, 80));
+
+    const result = await toPng(document.body, {
       cacheBust: true,
       width: window.innerWidth,
       height: window.innerHeight,
       style: { transform: 'none' },
     });
+
+    // Restore all hidden elements
+    for (const el of hidden) {
+      el.style.display = '';
+    }
+
+    return result;
   } catch {
+    // Restore on error
+    document.querySelectorAll('.dev-capture-overlay, [data-dev-logs-panel], [data-dev-logs-button]').forEach((el) => {
+      (el as HTMLElement).style.display = '';
+    });
     return '';
   }
 }
