@@ -1,0 +1,8 @@
+node_modules/
+dist/
+server/data/attachments/
+*.log
+.DS_Store
+.env
+
+server/data/*.json
