@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Camera,
@@ -14,6 +14,10 @@ import {
   X,
   AlertTriangle,
   Crosshair,
+  Paperclip,
+  FileText,
+  Image as ImageIcon,
+  File as FileIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { createRequest, uploadAttachment } from '../lib/api';
@@ -92,6 +96,9 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<Priority>('medium');
   const [category, setCategory] = useState<Category>('bug');
+  const [files, setFiles] = useState<File[]>([]);
+  const [draggingOver, setDraggingOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submittedId, setSubmittedId] = useState<string | null>(null);
@@ -155,6 +162,15 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
         } catch { /* ignore */ }
       }
 
+      // Upload attached files
+      if (files.length > 0 && requestId) {
+        for (const file of files) {
+          try {
+            await uploadAttachment(requestId, file);
+          } catch { /* ignore */ }
+        }
+      }
+
       queryClient.invalidateQueries({ queryKey: ['requests'] });
       setSubmitted(true);
       setSubmittedId(requestId || null);
@@ -172,8 +188,30 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
     setSubmittedId(null);
     setDescription('');
     setScreenshotData('');
+    setFiles([]);
     setPriority('medium');
     setCategory('bug');
+  };
+
+  const handleFileSelect = (newFiles: FileList | null) => {
+    if (!newFiles) return;
+    setFiles(prev => [...prev, ...Array.from(newFiles)]);
+  };
+
+  const removeFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const getFileIcon = (file: File) => {
+    if (file.type.startsWith('image/')) return ImageIcon;
+    if (file.type.startsWith('text/') || file.name.endsWith('.log') || file.name.endsWith('.json') || file.name.endsWith('.csv')) return FileText;
+    return FileIcon;
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
   };
 
   if (submitted) {
@@ -295,6 +333,73 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
             )}
           </div>
         )}
+
+        {/* File attachments */}
+        <div>
+          <label className="text-[11px] font-medium mb-1.5 block" style={{ color: '#94a3b8' }}>
+            Attachments {files.length > 0 && `(${files.length})`}
+          </label>
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDraggingOver(true); }}
+            onDragLeave={() => setDraggingOver(false)}
+            onDrop={(e) => { e.preventDefault(); setDraggingOver(false); handleFileSelect(e.dataTransfer.files); }}
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center justify-center gap-2 py-2.5 rounded-lg text-[11px] font-medium cursor-pointer transition-all"
+            style={{
+              background: draggingOver ? 'rgba(6,182,212,0.08)' : 'rgba(15,23,42,0.5)',
+              border: `1.5px dashed ${draggingOver ? 'rgba(6,182,212,0.5)' : 'rgba(51,65,85,0.4)'}`,
+              color: draggingOver ? '#22d3ee' : '#64748b',
+            }}
+          >
+            <Paperclip size={12} />
+            <span>Drop files here or click to browse</span>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => { handleFileSelect(e.target.files); e.target.value = ''; }}
+          />
+          {files.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {files.map((file, i) => {
+                const Icon = getFileIcon(file);
+                const isImage = file.type.startsWith('image/');
+                return (
+                  <div
+                    key={`${file.name}-${i}`}
+                    className="flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] group"
+                    style={{
+                      background: 'rgba(15,23,42,0.7)',
+                      border: '1px solid rgba(51,65,85,0.4)',
+                      color: '#94a3b8',
+                      maxWidth: '100%',
+                    }}
+                  >
+                    {isImage ? (
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={file.name}
+                        className="w-5 h-5 rounded object-cover flex-shrink-0"
+                      />
+                    ) : (
+                      <Icon size={12} className="flex-shrink-0" style={{ color: '#64748b' }} />
+                    )}
+                    <span className="truncate" style={{ maxWidth: 120 }}>{file.name}</span>
+                    <span style={{ color: '#475569' }}>{formatFileSize(file.size)}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); removeFile(i); }}
+                      className="ml-0.5 hover:text-red-400 transition-colors flex-shrink-0"
+                    >
+                      <X size={10} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
         {/* Description */}
         <div>
