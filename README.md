@@ -34,6 +34,11 @@
 npx @hemangjoshi37a/dev-logs
 ```
 
+<img width="1366" height="768" alt="Screenshot from 2026-04-17 16-31-50" src="https://github.com/user-attachments/assets/03d43855-ce8a-4031-ac17-f7982b0e60f8" />
+
+
+
+
 **One command. Zero config. Instant bug tracking.**
 
 </div>
