@@ -2,21 +2,38 @@ import { useState, useEffect } from 'react';
 import FloatingPanel from './components/FloatingPanel';
 import FloatingBugButton from './components/FloatingBugButton';
 import DevCapture from './components/DevCapture';
-import { installConsoleInterceptor } from './components/DevCapture';
+import KanbanDashboard from './components/KanbanDashboard';
+import { installConsoleInterceptor, installNetworkInterceptor } from './components/DevCapture';
 
-// Install console interceptor on load
+// Install interceptors on load
 installConsoleInterceptor();
+installNetworkInterceptor();
 
 export default function App() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [kanbanOpen, setKanbanOpen] = useState(false);
 
-  // Listen for the custom event from FloatingBugButton (toggles panel)
+  // Listen for custom events
   useEffect(() => {
-    const handler = () => setPanelOpen((prev) => !prev);
-    window.addEventListener('dev-capture:open', handler);
-    return () => window.removeEventListener('dev-capture:open', handler);
+    const togglePanel = () => setPanelOpen((prev) => !prev);
+    const openKanban = () => {
+      setPanelOpen(false);
+      setKanbanOpen(true);
+    };
+
+    window.addEventListener('dev-capture:open', togglePanel);
+    window.addEventListener('dev-logs:open-kanban', openKanban);
+
+    return () => {
+      window.removeEventListener('dev-capture:open', togglePanel);
+      window.removeEventListener('dev-logs:open-kanban', openKanban);
+    };
   }, []);
+
+  if (kanbanOpen) {
+    return <KanbanDashboard onClose={() => setKanbanOpen(false)} />;
+  }
 
   return (
     <>

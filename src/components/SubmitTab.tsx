@@ -102,6 +102,8 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submittedId, setSubmittedId] = useState<string | null>(null);
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
 
   const consoleErrors = ((window as any).__consoleBuffer as ConsoleEntry[] | undefined || []).filter((e) => e.level === 'error').length;
   const consoleWarnings = ((window as any).__consoleBuffer as ConsoleEntry[] | undefined || []).filter((e) => e.level === 'warn').length;
@@ -125,6 +127,7 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
     setSubmitting(true);
     try {
       const consoleLogs = ((window as any).__consoleBuffer as ConsoleEntry[] || []).slice(-50);
+      const networkLogs = ((window as any).__networkBuffer as any[] || []).slice(-20);
 
       // Auto-generate title from first 80 chars of description
       const autoTitle = description.trim().split('\n')[0].slice(0, 80) || 'New request';
@@ -141,6 +144,9 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
         consoleLogs.length > 0
           ? `\n**Console Logs**:\n\`\`\`\n${consoleLogs.map((l) => `[${l.level}] ${l.message}`).join('\n')}\n\`\`\``
           : '',
+        networkLogs.length > 0
+          ? `\n**Network Requests**:\n\`\`\`\n${networkLogs.map((n) => `[${n.method}] ${n.url} - ${n.status || 'FAIL'} (${n.duration || '?'}ms)`).join('\n')}\n\`\`\``
+          : '',
       ].filter(Boolean).join('\n');
 
       const body = {
@@ -150,6 +156,7 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
         category: (category === 'ui-ux' ? 'ui' : category) as Category,
         submitted_by: 'dev-capture',
         platform: window.location.hostname,
+        tags,
       };
 
       const result = await createRequest(body);
@@ -191,7 +198,17 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
     setFiles([]);
     setPriority('medium');
     setCategory('bug');
+    setTags([]);
+    setTagInput('');
   };
+
+  const addTag = (raw: string) => {
+    const t = raw.trim().toLowerCase().replace(/^#+/, '');
+    if (t && !tags.includes(t) && tags.length < 8) setTags((prev) => [...prev, t]);
+    setTagInput('');
+  };
+
+  const removeTag = (t: string) => setTags((prev) => prev.filter((x) => x !== t));
 
   const handleFileSelect = (newFiles: FileList | null) => {
     if (!newFiles) return;
@@ -466,6 +483,45 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
                 </button>
               );
             })}
+          </div>
+        </div>
+
+        {/* Tags */}
+        <div>
+          <label className="text-[11px] font-medium mb-1.5 block" style={{ color: '#94a3b8' }}>
+            Tags <span style={{ color: '#475569' }}>(press Enter to add)</span>
+          </label>
+          <div
+            className="flex flex-wrap gap-1.5 p-2 rounded-lg min-h-[32px] items-center"
+            style={{ background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(51,65,85,0.5)' }}
+          >
+            {tags.map((t) => (
+              <span
+                key={t}
+                className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full"
+                style={{ background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.25)', color: '#22d3ee' }}
+              >
+                #{t}
+                <button
+                  onClick={() => removeTag(t)}
+                  className="hover:text-red-400 transition-colors"
+                  type="button"
+                >
+                  <X size={8} />
+                </button>
+              </span>
+            ))}
+            <input
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagInput); }
+                if (e.key === 'Backspace' && !tagInput && tags.length > 0) removeTag(tags[tags.length - 1]);
+              }}
+              placeholder={tags.length === 0 ? 'auth, mobile, perf…' : ''}
+              className="flex-1 min-w-[80px] bg-transparent outline-none text-[11px]"
+              style={{ color: '#e2e8f0' }}
+            />
           </div>
         </div>
       </div>

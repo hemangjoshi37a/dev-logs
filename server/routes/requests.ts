@@ -5,6 +5,8 @@ import path from 'path';
 import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import { fileURLToPath } from 'url';
+// SSE + webhook helpers (imported lazily to avoid circular at startup)
+import { broadcastEvent, fireWebhook } from '../index.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -112,7 +114,7 @@ const storage = multer.diskStorage({
     cb(null, safeName);
   },
 });
-const upload = multer({ storage });
+const upload = multer({ storage, limits: { fileSize: 25 * 1024 * 1024 } }); // 25 MB cap
 
 // ---------------------------------------------------------------------------
 // GET / — List requests with optional filters + stats
@@ -135,7 +137,7 @@ router.get('/', (_req: Request, res: Response) => {
   const stats = {
     total: allRequests.length,
     completed: allRequests.filter((r) => r.status === 'completed').length,
-    in_progress: allRequests.filter((r) => r.status === 'in-progress').length,
+    in_progress: allRequests.filter((r) => r.status === 'in_progress').length,
     in_testing: allRequests.filter((r) => r.status === 'in_testing').length,
     pending: allRequests.filter((r) => r.status === 'submitted').length,
   };
@@ -186,6 +188,16 @@ router.post('/', (req: Request, res: Response) => {
   const requests = loadRequests();
   const body = req.body;
 
+  // Validate required fields
+  if (!body.title || typeof body.title !== 'string' || !body.title.trim()) {
+    res.status(400).json({ status: 'error', detail: 'title is required' });
+    return;
+  }
+  if (!body.description || typeof body.description !== 'string' || !body.description.trim()) {
+    res.status(400).json({ status: 'error', detail: 'description is required' });
+    return;
+  }
+
   // Generate next REQ-XXX ID
   const existingNums: number[] = [];
   for (const r of requests) {
@@ -223,10 +235,12 @@ router.post('/', (req: Request, res: Response) => {
     links,
     comments: [],
     submitted_by: body.submitted_by || 'client',
-    platform: body.platform || 'AgentiX Cyber',
+    platform: body.platform || 'dev-logs',
     completion_percentage: null,
     testing_notes: null,
     feedback: null,
+    tags: Array.isArray(body.tags) ? body.tags.filter((t: unknown) => typeof t === 'string') : [],
+    due_date: body.due_date || null,
   };
 
   requests.push(newRequest);
@@ -239,6 +253,9 @@ router.post('/', (req: Request, res: Response) => {
     { priority: body.priority, category: body.category, platform: body.platform },
     body.submitted_by || 'client',
   );
+
+  broadcastEvent('request_created', { id: newRequest.id, title: newRequest.title, priority: newRequest.priority, category: newRequest.category });
+  fireWebhook('request_created', { id: newRequest.id, title: newRequest.title, priority: newRequest.priority, status: 'submitted' });
 
   res.status(201).json({ status: 'success', request: newRequest });
 });
@@ -260,12 +277,15 @@ router.put('/:id', (req: Request, res: Response) => {
 
   const updatableFields = [
     'title', 'description', 'status', 'priority', 'category',
-    'platform', 'submitted_by', 'testing_notes', 'feedback',
+    'platform', 'submitted_by', 'testing_notes', 'feedback', 'due_date',
   ];
   for (const field of updatableFields) {
     if (body[field] !== undefined && body[field] !== null) {
       request[field] = body[field];
     }
+  }
+  if (Array.isArray(body.tags)) {
+    request.tags = body.tags.filter((t: unknown) => typeof t === 'string');
   }
   if (body.completion_percentage !== undefined && body.completion_percentage !== null) {
     request.completion_percentage = Math.max(0, Math.min(100, body.completion_percentage));
@@ -273,7 +293,7 @@ router.put('/:id', (req: Request, res: Response) => {
   request.updated_at = new Date().toISOString();
   saveRequests(requests);
 
-  // Record changes
+  // Record + broadcast changes
   if (body.status !== undefined && body.status !== oldStatus) {
     recordChange(
       req.params.id,
@@ -281,6 +301,8 @@ router.put('/:id', (req: Request, res: Response) => {
       `${req.params.id} status changed: ${oldStatus} → ${body.status}`,
       { old_status: oldStatus, new_status: body.status, title: request.title as string },
     );
+    broadcastEvent('status_change', { id: req.params.id, title: request.title, old_status: oldStatus, new_status: body.status });
+    fireWebhook('status_change', { request_id: req.params.id, title: request.title, old_status: oldStatus, new_status: body.status });
   }
   if (body.priority !== undefined && body.priority !== oldPriority) {
     recordChange(
@@ -328,7 +350,7 @@ router.post('/:id/checklist', (req: Request, res: Response) => {
   }
 
   const checklist = (request.checklist as Array<Record<string, unknown>>) || [];
-  const newId = `c${checklist.length + 1}`;
+  const newId = `c-${uuidv4().slice(0, 8)}`;
   checklist.push({ id: newId, text: req.body.text, checked: false });
   request.checklist = checklist;
   request.updated_at = new Date().toISOString();
@@ -562,6 +584,89 @@ router.patch('/:id/completion', (req: Request, res: Response) => {
   );
 
   res.json({ status: 'success', request });
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /:id/tags — Update tags array
+// ---------------------------------------------------------------------------
+router.patch('/:id/tags', (req: Request, res: Response) => {
+  const requests = loadRequests();
+  const request = findRequest(requests, req.params.id);
+  if (!request) {
+    res.status(404).json({ status: 'error', detail: `Request ${req.params.id} not found` });
+    return;
+  }
+
+  const { tags } = req.body;
+  if (!Array.isArray(tags)) {
+    res.status(400).json({ status: 'error', detail: 'tags must be an array of strings' });
+    return;
+  }
+
+  const cleaned = tags
+    .filter((t: unknown) => typeof t === 'string' && t.trim().length > 0)
+    .map((t: string) => t.trim().toLowerCase());
+
+  request.tags = cleaned;
+  request.updated_at = new Date().toISOString();
+  saveRequests(requests);
+
+  recordChange(
+    req.params.id,
+    'tags_updated',
+    `${req.params.id}: tags updated — [${cleaned.join(', ')}]`,
+    { tags: cleaned, title: request.title as string },
+  );
+
+  res.json({ status: 'success', tags: cleaned });
+});
+
+// ---------------------------------------------------------------------------
+// GET /export — Export all requests in JSON, CSV, or Markdown
+// ---------------------------------------------------------------------------
+router.get('/export', (req: Request, res: Response) => {
+  const format = (req.query.format as string) || 'json';
+  const requests = loadRequests();
+
+  if (format === 'csv') {
+    const header = 'id,title,status,priority,category,submitted_by,created_at,completion_percentage,tags';
+    const rows = requests.map((r) => {
+      const tags = Array.isArray(r.tags) ? (r.tags as string[]).join(';') : '';
+      return [
+        r.id, `"${String(r.title || '').replace(/"/g, '""')}"`,
+        r.status, r.priority, r.category, r.submitted_by,
+        r.created_at, r.completion_percentage ?? '', `"${tags}"`,
+      ].join(',');
+    });
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="dev-logs-export.csv"');
+    res.send([header, ...rows].join('\n'));
+    return;
+  }
+
+  if (format === 'markdown') {
+    const lines: string[] = ['# Dev Logs Export', `> Generated: ${new Date().toISOString()}`, ''];
+    for (const r of requests) {
+      const tags = Array.isArray(r.tags) && (r.tags as string[]).length > 0
+        ? ` · Tags: ${(r.tags as string[]).join(', ')}`
+        : '';
+      lines.push(`## ${r.id}: ${r.title}`);
+      lines.push(`**Status:** ${r.status} | **Priority:** ${r.priority} | **Category:** ${r.category}${tags}`);
+      lines.push(`**Created:** ${r.created_at}`);
+      if (r.description) lines.push(`\n${r.description}`);
+      lines.push('');
+      lines.push('---');
+      lines.push('');
+    }
+    res.setHeader('Content-Type', 'text/markdown');
+    res.setHeader('Content-Disposition', 'attachment; filename="dev-logs-export.md"');
+    res.send(lines.join('\n'));
+    return;
+  }
+
+  // Default: JSON
+  res.setHeader('Content-Disposition', 'attachment; filename="dev-logs-export.json"');
+  res.json({ exported_at: new Date().toISOString(), count: requests.length, requests });
 });
 
 export default router;

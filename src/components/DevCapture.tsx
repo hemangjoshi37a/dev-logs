@@ -93,12 +93,22 @@ interface SelectedElement {
   componentName?: string;
 }
 
+export interface NetworkEntry {
+  method: string;
+  url: string;
+  status?: number;
+  duration?: number;
+  timestamp: string;
+  response?: string;
+}
+
 // ---------------------------------------------------------------------------
-// Console buffer (global)
+// Console & Network buffer (global)
 // ---------------------------------------------------------------------------
 declare global {
   interface Window {
     __consoleBuffer?: ConsoleEntry[];
+    __networkBuffer?: NetworkEntry[];
   }
 }
 
@@ -132,6 +142,89 @@ export function installConsoleInterceptor() {
   };
 
   window.__consoleBuffer = buf;
+}
+
+let _networkInterceptorInstalled = false;
+export function installNetworkInterceptor() {
+  if (_networkInterceptorInstalled) return;
+  _networkInterceptorInstalled = true;
+
+  const buf: NetworkEntry[] = [];
+  const MAX = 50;
+
+  window.__networkBuffer = buf;
+
+  // Intercept fetch
+  const origFetch = window.fetch;
+  window.fetch = async (...args) => {
+    const startTime = Date.now();
+    const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request).url;
+    const method = (args[1]?.method || 'GET').toUpperCase();
+
+    if (url.includes('/api/requests') || url.includes('/api/events')) {
+      return origFetch(...args);
+    }
+
+    const entry: NetworkEntry = {
+      method,
+      url,
+      timestamp: new Date().toISOString(),
+    };
+
+    buf.push(entry);
+    if (buf.length > MAX) buf.shift();
+
+    try {
+      const response = await origFetch(...args);
+      entry.status = response.status;
+      entry.duration = Date.now() - startTime;
+      return response;
+    } catch (err) {
+      entry.status = 0;
+      entry.duration = Date.now() - startTime;
+      entry.response = String(err);
+      throw err;
+    }
+  };
+
+  // Intercept XHR
+  const origXHR = window.XMLHttpRequest;
+  class InterceptedXHR extends origXHR {
+    private _method = 'GET';
+    private _url = '';
+    private _startTime = 0;
+
+    open(method: string, url: string | URL, ...rest: any[]) {
+      this._method = method.toUpperCase();
+      this._url = url.toString();
+      // @ts-ignore
+      return super.open(method, url, ...rest);
+    }
+
+    send(body?: Document | XMLHttpRequestBodyInit | null) {
+      if (this._url.includes('/api/requests') || this._url.includes('/api/events')) {
+        return super.send(body);
+      }
+
+      this._startTime = Date.now();
+      const entry: NetworkEntry = {
+        method: this._method,
+        url: this._url,
+        timestamp: new Date().toISOString(),
+      };
+
+      buf.push(entry);
+      if (buf.length > MAX) buf.shift();
+
+      this.addEventListener('loadend', () => {
+        entry.status = this.status;
+        entry.duration = Date.now() - this._startTime;
+      });
+
+      return super.send(body);
+    }
+  }
+  window.XMLHttpRequest = InterceptedXHR;
 }
 
 // ---------------------------------------------------------------------------
@@ -621,6 +714,7 @@ const DevCapture: React.FC<DevCaptureProps> = ({ open, onClose, apiUrl }) => {
         description ? `## Description\n${description}` : '',
         elementsBlock,
         consoleLogs.length > 0 ? `\n## Recent Console Logs\n\`\`\`\n${consoleLogs.map((l) => `[${l.level}] ${l.message}`).join('\n')}\n\`\`\`` : '',
+        (window.__networkBuffer || []).length > 0 ? `\n## Recent Network Requests\n\`\`\`\n${(window.__networkBuffer || []).slice(-20).map((n) => `[${n.method}] ${n.url} - ${n.status || 'FAIL'} (${n.duration || '?'}ms)`).join('\n')}\n\`\`\`` : '',
       ].filter(Boolean).join('\n');
 
       const body = {

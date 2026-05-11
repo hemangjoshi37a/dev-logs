@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
@@ -11,9 +11,74 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = parseInt(process.env.PORT || '4445', 10);
 
+// ---------------------------------------------------------------------------
+// SSE client registry — broadcast real-time events to the dashboard
+// ---------------------------------------------------------------------------
+export const sseClients = new Set<Response>();
+
+export function broadcastEvent(event: string, data: unknown) {
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const client of sseClients) {
+    try {
+      client.write(payload);
+    } catch {
+      sseClients.delete(client);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Webhook — fire-and-forget POST to configured URL
+// ---------------------------------------------------------------------------
+const WEBHOOK_URL = process.env.DEV_LOGS_WEBHOOK_URL || '';
+
+export async function fireWebhook(event: string, payload: unknown) {
+  if (!WEBHOOK_URL) return;
+  try {
+    await fetch(WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event, ...( payload as object) }),
+    });
+  } catch (err) {
+    console.warn('[dev-logs] Webhook delivery failed:', (err as Error).message);
+  }
+}
+
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// ---------------------------------------------------------------------------
+// GET /api/events — SSE stream for real-time dashboard updates
+// ---------------------------------------------------------------------------
+app.get('/api/events', (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  // Send heartbeat immediately so the browser knows it connected
+  res.write(': heartbeat\n\n');
+
+  sseClients.add(res);
+
+  // Keep-alive ping every 25 seconds
+  const keepAlive = setInterval(() => {
+    try {
+      res.write(': ping\n\n');
+    } catch {
+      clearInterval(keepAlive);
+      sseClients.delete(res);
+    }
+  }, 25_000);
+
+  req.on('close', () => {
+    clearInterval(keepAlive);
+    sseClients.delete(res);
+  });
+});
 
 // Serve uploaded attachments
 const attachmentsDir = path.join(__dirname, 'data', 'attachments');
@@ -43,4 +108,7 @@ for (const dir of dirs) {
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`dev-logs server running on http://localhost:${PORT}`);
+  if (WEBHOOK_URL) {
+    console.log(`[dev-logs] Webhook enabled → ${WEBHOOK_URL}`);
+  }
 });

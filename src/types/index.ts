@@ -53,6 +53,8 @@ export interface DevRequest {
   completion_percentage: number;
   testing_notes: string;
   feedback: string;
+  tags: string[];
+  due_date: string | null;
 }
 
 export interface Stats {
