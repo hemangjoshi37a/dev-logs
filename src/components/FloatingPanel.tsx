@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bug, Minus, X, Send, List } from 'lucide-react';
+import { Bug, Minus, X, Send, List, Activity } from 'lucide-react';
 import SubmitTab from './SubmitTab';
 import RequestList from './RequestList';
 import RequestDetail from './RequestDetail';
@@ -313,6 +313,16 @@ export default function FloatingPanel({ isOpen, onClose, onOpenCapture }: Floati
 
             {/* Right: controls */}
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('dev-logs:open-insight'))}
+                title="Open Insight Engine"
+                className="w-7 h-7 rounded-md flex items-center justify-center transition-colors"
+                style={{ color: '#94a3b8' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#a855f7'; e.currentTarget.style.background = 'rgba(168,85,247,0.1)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'transparent' }}
+              >
+                <Activity size={14} />
+              </button>
               <button
                 onClick={() => window.dispatchEvent(new CustomEvent('dev-logs:open-kanban'))}
                 title="Open Full Kanban Board"
