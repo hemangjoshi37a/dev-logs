@@ -397,9 +397,22 @@ export default function RequestDetail({ requestId, onBack }: RequestDetailProps)
 
       {/* Git & GitHub */}
       <div className="py-2.5 border-t border-[rgba(51,65,85,0.2)]">
-        <h3 className="text-[11px] uppercase tracking-wider font-semibold mb-2 flex items-center gap-1" style={{ color: '#64748b' }}>
-          <GitBranch size={11} /> Git Integration
-        </h3>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-[11px] uppercase tracking-wider font-semibold flex items-center gap-1" style={{ color: '#64748b' }}>
+            <GitBranch size={11} /> Git & Issue Integration
+          </h3>
+          <button
+            onClick={() => {
+              const md = `## ${heading}\n\n**Status:** ${request.status} | **Priority:** ${request.priority}\n\n### Description\n${userDesc}\n\n### Environment\n- **Browser:** ${metadata.browser || 'N/A'}\n- **OS:** ${request.environment_context?.os || 'N/A'}\n- **Node:** ${request.environment_context?.node || 'N/A'}`;
+              navigator.clipboard.writeText(md);
+              toast.success('Markdown copied! Paste into GitHub or Jira.');
+            }}
+            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-colors hover:bg-blue-500/20"
+            style={{ background: 'rgba(59,130,246,0.1)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.2)' }}
+          >
+            <ExternalLink size={10} /> Export Markdown
+          </button>
+        </div>
         <div className="space-y-2">
           <div>
             <label className="text-[10px] block mb-1" style={{ color: '#94a3b8' }}>Branch Name</label>

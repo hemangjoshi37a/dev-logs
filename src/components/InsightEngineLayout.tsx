@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import AnalyticsDashboard from './AnalyticsDashboard';
+import ArchitectureCanvas from './ArchitectureCanvas';
 import MockStudio from './MockStudio';
 import AutoTestGenerator from './AutoTestGenerator';
 import ExecutionEngine from './ExecutionEngine';
@@ -9,7 +10,7 @@ import ApiReplay from './ApiReplay';
 import DatabaseExplorer from './DatabaseExplorer';
 import SystemMonitor from './SystemMonitor';
 import DevToolkit from './DevToolkit';
-import { X, Activity, Server, Code, TerminalSquare, Globe, Webhook, RefreshCcw, Database, HardDrive, Wrench } from 'lucide-react';
+import { X, Activity, Server, Code, TerminalSquare, Globe, Webhook, RefreshCcw, Database, HardDrive, Wrench, Share2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface Props {
@@ -17,7 +18,7 @@ interface Props {
 }
 
 export default function InsightEngineLayout({ onClose }: Props) {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'mock' | 'tests' | 'exec' | 'env' | 'webhook' | 'replay' | 'db' | 'sys' | 'tools'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'canvas' | 'mock' | 'tests' | 'exec' | 'env' | 'webhook' | 'replay' | 'db' | 'sys' | 'tools'>('analytics');
   const [shouldCrash, setShouldCrash] = useState(false);
 
   if (shouldCrash) {
@@ -27,6 +28,7 @@ export default function InsightEngineLayout({ onClose }: Props) {
   const renderTabContent = () => {
     switch(activeTab) {
       case 'analytics': return <AnalyticsDashboard />;
+      case 'canvas': return <ArchitectureCanvas />;
       case 'mock': return <MockStudio />;
       case 'tests': return <AutoTestGenerator />;
       case 'exec': return <ExecutionEngine />;
@@ -61,6 +63,7 @@ export default function InsightEngineLayout({ onClose }: Props) {
           <div className="flex gap-1 bg-gray-900 p-1 rounded-lg border border-gray-800 shrink-0">
             {[
               { id: 'analytics', icon: Activity, label: 'Analytics', color: '' },
+              { id: 'canvas', icon: Share2, label: 'Architecture', color: 'text-pink-400' },
               { id: 'mock', icon: Server, label: 'Mock Studio', color: '' },
               { id: 'tests', icon: Code, label: 'Auto-Tests', color: '' },
               { id: 'exec', icon: TerminalSquare, label: 'Exec Engine', color: 'text-green-400' },

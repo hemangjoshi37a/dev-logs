@@ -221,4 +221,85 @@ router.post('/sql', (req: Request, res: Response) => {
   }
 });
 
+// Endpoint to get analytics data
+router.get('/analytics', (req: Request, res: Response) => {
+  try {
+    const totalReqs = db.prepare('SELECT count(*) as count FROM requests').get() as { count: number };
+    const statusCounts = db.prepare('SELECT status, count(*) as count FROM requests GROUP BY status').all();
+    const priorityCounts = db.prepare('SELECT priority, count(*) as count FROM requests GROUP BY priority').all();
+    const categoryCounts = db.prepare('SELECT category, count(*) as count FROM requests GROUP BY category').all();
+    const recentReqs = db.prepare(`
+      SELECT substr(created_at, 1, 10) as date, count(*) as count 
+      FROM requests 
+      GROUP BY date 
+      ORDER BY date DESC 
+      LIMIT 14
+    `).all().reverse();
+
+    res.json({
+      status: 'success',
+      data: {
+        total: totalReqs.count,
+        byStatus: statusCounts,
+        byPriority: priorityCounts,
+        byCategory: categoryCounts,
+        timeline: recentReqs
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ status: 'error', detail: (error as Error).message });
+  }
+});
+
+import { v4 as uuidv4 } from 'uuid';
+
+// Endpoint to get all whiteboards
+router.get('/whiteboards', (req: Request, res: Response) => {
+  try {
+    const results = db.prepare('SELECT * FROM whiteboards ORDER BY updated_at DESC').all();
+    const parsed = results.map((r: any) => ({ ...r, data: JSON.parse(r.data) }));
+    res.json({ status: 'success', data: parsed });
+  } catch (error) {
+    res.status(500).json({ status: 'error', detail: (error as Error).message });
+  }
+});
+
+// Endpoint to save a whiteboard
+router.post('/whiteboards', (req: Request, res: Response) => {
+  try {
+    const { id, name, data } = req.body;
+    const now = new Date().toISOString();
+    
+    if (id) {
+      // Update existing
+      const existing = db.prepare('SELECT id FROM whiteboards WHERE id = ?').get(id);
+      if (existing) {
+        db.prepare('UPDATE whiteboards SET name = ?, data = ?, updated_at = ? WHERE id = ?')
+          .run(name || 'Untitled Canvas', JSON.stringify(data), now, id);
+        res.json({ status: 'success', data: { id } });
+        return;
+      }
+    }
+    
+    // Create new
+    const newId = id || uuidv4();
+    db.prepare('INSERT INTO whiteboards (id, name, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+      .run(newId, name || 'Untitled Canvas', JSON.stringify(data || { nodes: [], edges: [] }), now, now);
+      
+    res.json({ status: 'success', data: { id: newId } });
+  } catch (error) {
+    res.status(500).json({ status: 'error', detail: (error as Error).message });
+  }
+});
+
+// Endpoint to delete a whiteboard
+router.delete('/whiteboards/:id', (req: Request, res: Response) => {
+  try {
+    db.prepare('DELETE FROM whiteboards WHERE id = ?').run(req.params.id);
+    res.json({ status: 'success' });
+  } catch (error) {
+    res.status(500).json({ status: 'error', detail: (error as Error).message });
+  }
+});
+
 export default router;

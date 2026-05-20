@@ -32,6 +32,14 @@ db.exec(`
     timestamp TEXT,
     data TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS whiteboards (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    data TEXT,
+    created_at TEXT,
+    updated_at TEXT
+  );
 `);
 
 // ---------------------------------------------------------------------------
