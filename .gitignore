@@ -6,6 +6,9 @@ server/data/attachments/
 .env
 
 server/data/*.json
+server/data/*.json.backup
+server/data/*.db
+server/data/*.db-journal
 
 .dev-logs/
 dist/

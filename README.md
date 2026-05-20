@@ -57,6 +57,13 @@ npx @hemangjoshi37a/dev-logs
   - **Element Picker** — Click DOM elements to capture tag, classes, selector, dimensions
   - **Snip Area** — Crop specific regions of the page
   - **Annotate** — Freehand drawing on screenshots with color/width controls
+- **🎥 Live Screen Video Recording** — Record screen bugs and user flows directly from the submit panel using the MediaRecorder API, with automatic `.webm` file attachments.
+- **🚀 Draggable Performance HUD** — Draggable, floating heads-up display displaying real-time **Frames Per Second (FPS)** and **Memory Usage (JS Heap)**.
+- **🔄 API Request Replay Engine** — Advanced developer network interceptor capturing request URLs, methods, headers, and body payloads with an editor interface to instantly edit and replay HTTP requests from the dashboard.
+- **👤 Lightweight Developer Profiles** — Zero-config developer profile creation matching bug submissions and comment threads to authenticated names saved in `localStorage`.
+- **👥 Real-Time Multiplayer Collaboration** — Real-time cursor synchronization utilizing `Socket.io`, allowing multiple active developers to see color-coded multiplayer cursors across sessions.
+- **💾 SQLite Persistent Storage** — Migrated storage engine from legacy volatile JSON files to a robust **SQLite** database (`better-sqlite3`) with automated data migrations.
+- **✨ Framer Motion Dashboard Transitions** — Smooth, premium-grade animations and layout transitions inside the Insight Engine dashboard.
 - **File Attachments** — Drag & drop or browse to attach images, logs, text files, or anything
 - **Full Ticket Tracking** — Status lifecycle: `submitted → in-progress → in_testing → completed`
 - **Checklists** — Break down work items with completion tracking
@@ -66,7 +73,6 @@ npx @hemangjoshi37a/dev-logs
 - **Completion Tracking** — Slider-based percentage tracking per request
 - **Search & Filter** — Find requests by text, filter by status
 - **AI-Ready** — Structured JSON output with full context for AI consumption
-- **Zero Config Storage** — JSON file storage, no database needed
 - **Clean Screenshots** — All overlay UI is hidden during page capture
 
 ## Screenshots
@@ -195,7 +201,7 @@ export default defineConfig({
 │   │  overlay.js      │  │     │                          │
 │   └──────────────────┘  │     │   Backend (Express)      │
 │                         │     │   http://localhost:4445   │
-│   🐛 Bug Button         │     │                          │
+│   🐛 Bug Button        │     │                          │
 │   (captures context)    │────►│   /api/requests          │
 │                         │     │   JSON file storage      │
 └─────────────────────────┘     └──────────────────────────┘

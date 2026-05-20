@@ -17,6 +17,12 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronRight,
+  TerminalSquare,
+  GitBranch,
+  Github,
+  Clock,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -30,6 +36,7 @@ import {
   uploadAttachment,
   updateFeedback,
   updateCompletion,
+  suggestFix,
 } from '../lib/api';
 import { cn } from '../lib/utils';
 import { STATUS_BADGE, PRIORITY_BADGE } from './RequestList';
@@ -108,11 +115,12 @@ export default function RequestDetail({ requestId, onBack }: RequestDetailProps)
 
   const [newChecklistText, setNewChecklistText] = useState('');
   const [newCommentText, setNewCommentText] = useState('');
-  const [newCommentAuthor, setNewCommentAuthor] = useState('');
+  const [newCommentAuthor, setNewCommentAuthor] = useState(localStorage.getItem('devLogs_author') || '');
   const [newLinkLabel, setNewLinkLabel] = useState('');
   const [newLinkUrl, setNewLinkUrl] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [contextExpanded, setContextExpanded] = useState(false);
+  const [aiFixSuggestion, setAiFixSuggestion] = useState('');
 
   const id = requestId;
 
@@ -131,6 +139,18 @@ export default function RequestDetail({ requestId, onBack }: RequestDetailProps)
     mutationFn: (status: Status) => updateRequest(id, { status }),
     onSuccess: () => { invalidate(); toast.success('Status updated'); },
     onError: () => toast.error('Failed to update status'),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (data: Partial<DevRequest>) => updateRequest(id, data),
+    onSuccess: () => { invalidate(); },
+    onError: () => toast.error('Failed to update request'),
+  });
+
+  const suggestFixMutation = useMutation({
+    mutationFn: () => suggestFix(id),
+    onSuccess: (data) => { setAiFixSuggestion(data); toast.success('Fix generated'); },
+    onError: () => toast.error('Failed to generate fix'),
   });
 
   const checklistAddMutation = useMutation({
@@ -258,7 +278,28 @@ export default function RequestDetail({ requestId, onBack }: RequestDetailProps)
 
       {/* Description */}
       <div className="py-2.5 border-t border-[rgba(51,65,85,0.2)]">
-        <h3 className="text-[11px] uppercase tracking-wider font-semibold mb-1.5" style={{ color: '#64748b' }}>Description</h3>
+        <div className="flex items-center justify-between mb-1.5">
+          <h3 className="text-[11px] uppercase tracking-wider font-semibold" style={{ color: '#64748b' }}>Description</h3>
+          <button
+            onClick={() => suggestFixMutation.mutate()}
+            disabled={suggestFixMutation.isPending}
+            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-colors"
+            style={{ background: 'rgba(168,85,247,0.1)', color: '#c084fc', border: '1px solid rgba(168,85,247,0.2)' }}
+          >
+            {suggestFixMutation.isPending ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />}
+            AI Suggest Fix
+          </button>
+        </div>
+        
+        {aiFixSuggestion && (
+          <div className="mb-3 p-2.5 rounded-lg border border-purple-500/30 bg-purple-500/10 text-[11px] font-mono leading-relaxed" style={{ color: '#e9d5ff' }}>
+            <div className="flex items-center gap-1.5 text-purple-400 font-bold mb-1 border-b border-purple-500/20 pb-1">
+              <Sparkles size={12} /> AI Fix Recommendation
+            </div>
+            {aiFixSuggestion}
+          </div>
+        )}
+
         <div className="text-[12px] whitespace-pre-wrap font-mono leading-relaxed" style={{ color: '#cbd5e1' }}>
           {userDesc || <span style={{ color: '#475569', fontStyle: 'italic' }}>No description</span>}
         </div>
@@ -284,6 +325,31 @@ export default function RequestDetail({ requestId, onBack }: RequestDetailProps)
             {metadata.warnings && <><span>Warnings</span><span style={{ color: metadata.warnings !== '0' ? '#f59e0b' : '#64748b' }}>{metadata.warnings}</span></>}
           </div>
         )}
+
+        {/* Environment Extractor Context */}
+        {request.environment_context && (
+          <div className="mt-3">
+            <h3 className="text-[10px] uppercase tracking-wider font-semibold mb-1 flex items-center gap-1" style={{ color: '#64748b' }}>
+              <TerminalSquare size={10} /> Local Environment Info
+            </h3>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[10px] font-mono pl-1" style={{ color: '#475569' }}>
+              {request.environment_context.os && <><span>OS</span><span style={{ color: '#64748b' }}>{request.environment_context.os}</span></>}
+              {request.environment_context.node && <><span>Node</span><span style={{ color: '#64748b' }}>{request.environment_context.node}</span></>}
+              {request.environment_context.memory_gb && <><span>RAM</span><span style={{ color: '#64748b' }}>{request.environment_context.memory_gb}GB</span></>}
+              {request.environment_context.git_branch && <><span>Git Branch</span><span style={{ color: '#64748b' }}>{request.environment_context.git_branch}</span></>}
+            </div>
+            
+            {request.environment_context.git_status && request.environment_context.git_status.length > 0 && (
+              <div className="mt-1 pl-1">
+                <span className="text-[10px] font-mono" style={{ color: '#475569' }}>Uncommitted changes ({request.environment_context.git_status.length})</span>
+                <div className="text-[9px] font-mono mt-0.5 leading-tight" style={{ color: '#ef4444' }}>
+                  {request.environment_context.git_status.slice(0, 5).join('\n')}
+                  {request.environment_context.git_status.length > 5 ? '\n...and more' : ''}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Completion */}
@@ -299,6 +365,75 @@ export default function RequestDetail({ requestId, onBack }: RequestDetailProps)
           <span className="text-[11px] font-medium w-8 text-right tabular-nums" style={{ color: '#e2e8f0' }}>
             {request.completion_percentage}%
           </span>
+        </div>
+      </div>
+
+      {/* Time Tracking */}
+      <div className="py-2.5 border-t border-[rgba(51,65,85,0.2)]">
+        <h3 className="text-[11px] uppercase tracking-wider font-semibold mb-2 flex items-center gap-1" style={{ color: '#64748b' }}>
+          <Clock size={11} /> Time Tracking
+        </h3>
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="text-[10px] block mb-1" style={{ color: '#94a3b8' }}>Est. Hours</label>
+            <input 
+              type="number" min={0} step={0.5}
+              defaultValue={request.estimated_hours || 0}
+              onBlur={(e) => updateMutation.mutate({ estimated_hours: Number(e.target.value) })}
+              className="w-full px-2 py-1 rounded text-[11px] outline-none" style={inputStyle} 
+            />
+          </div>
+          <div className="flex-1">
+            <label className="text-[10px] block mb-1" style={{ color: '#94a3b8' }}>Actual Hours</label>
+            <input 
+              type="number" min={0} step={0.5}
+              defaultValue={request.actual_hours || 0}
+              onBlur={(e) => updateMutation.mutate({ actual_hours: Number(e.target.value) })}
+              className="w-full px-2 py-1 rounded text-[11px] outline-none" style={inputStyle} 
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Git & GitHub */}
+      <div className="py-2.5 border-t border-[rgba(51,65,85,0.2)]">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-[11px] uppercase tracking-wider font-semibold flex items-center gap-1" style={{ color: '#64748b' }}>
+            <GitBranch size={11} /> Git & Issue Integration
+          </h3>
+          <button
+            onClick={() => {
+              const md = `## ${heading}\n\n**Status:** ${request.status} | **Priority:** ${request.priority}\n\n### Description\n${userDesc}\n\n### Environment\n- **Browser:** ${metadata.browser || 'N/A'}\n- **OS:** ${request.environment_context?.os || 'N/A'}\n- **Node:** ${request.environment_context?.node || 'N/A'}`;
+              navigator.clipboard.writeText(md);
+              toast.success('Markdown copied! Paste into GitHub or Jira.');
+            }}
+            className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium transition-colors hover:bg-blue-500/20"
+            style={{ background: 'rgba(59,130,246,0.1)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.2)' }}
+          >
+            <ExternalLink size={10} /> Export Markdown
+          </button>
+        </div>
+        <div className="space-y-2">
+          <div>
+            <label className="text-[10px] block mb-1" style={{ color: '#94a3b8' }}>Branch Name</label>
+            <input 
+              type="text" placeholder="e.g. fix/header-bug"
+              defaultValue={request.git_branch || ''}
+              onBlur={(e) => updateMutation.mutate({ git_branch: e.target.value })}
+              className="w-full px-2 py-1 rounded text-[11px] outline-none" style={inputStyle} 
+            />
+          </div>
+          <div>
+            <label className="text-[10px] block mb-1 flex items-center gap-1" style={{ color: '#94a3b8' }}>
+              <Github size={10} /> Pull Request URL
+            </label>
+            <input 
+              type="url" placeholder="https://github.com/..."
+              defaultValue={request.github_pr || ''}
+              onBlur={(e) => updateMutation.mutate({ github_pr: e.target.value })}
+              className="w-full px-2 py-1 rounded text-[11px] outline-none" style={inputStyle} 
+            />
+          </div>
         </div>
       </div>
 
@@ -411,7 +546,12 @@ export default function RequestDetail({ requestId, onBack }: RequestDetailProps)
           ))}
         </div>
         <form onSubmit={(e) => { e.preventDefault(); if (newCommentText.trim()) commentMutation.mutate(); }} className="mt-2 space-y-1">
-          <input type="text" value={newCommentAuthor} onChange={(e) => setNewCommentAuthor(e.target.value)}
+          <input type="text" value={newCommentAuthor} onChange={(e) => {
+            const val = e.target.value;
+            setNewCommentAuthor(val);
+            if (val.trim()) localStorage.setItem('devLogs_author', val.trim());
+            else localStorage.removeItem('devLogs_author');
+          }}
             placeholder="Name (optional)" className="w-full px-2.5 py-1.5 rounded-lg text-[12px] outline-none" style={inputStyle} />
           <div className="flex gap-1.5">
             <textarea value={newCommentText} onChange={(e) => setNewCommentText(e.target.value)}

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bug, Minus, X, Send, List } from 'lucide-react';
+import { Bug, Minus, X, Send, List, Activity } from 'lucide-react';
 import SubmitTab from './SubmitTab';
 import RequestList from './RequestList';
 import RequestDetail from './RequestDetail';
@@ -23,6 +23,7 @@ interface PanelState {
   position: { x: number; y: number };
   size: { width: number; height: number };
 }
+
 
 function loadState(): Partial<PanelState> {
   try {
@@ -67,7 +68,7 @@ export default function FloatingPanel({ isOpen, onClose, onOpenCapture }: Floati
 
   const [isMinimized, setIsMinimized] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>(saved.activeTab ?? 'submit');
-  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(saved.selectedRequestId ?? null);
   const [size, setSize] = useState(() => {
     if (saved.size) return clampSize(saved.size.width, saved.size.height);
     return { width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
@@ -104,10 +105,10 @@ export default function FloatingPanel({ isOpen, onClose, onOpenCapture }: Floati
     }
   }, [isOpen, size.width, size.height]);
 
-  // Persist position/size/tab
+  // Persist position/size/tab/selectedRequestId
   useEffect(() => {
-    saveState({ position, size, activeTab });
-  }, [position, size, activeTab]);
+    saveState({ position, size, activeTab, selectedRequestId });
+  }, [position, size, activeTab, selectedRequestId]);
 
   // Drag handlers
   const onDragStart = useCallback((e: React.MouseEvent) => {
@@ -299,7 +300,7 @@ export default function FloatingPanel({ isOpen, onClose, onOpenCapture }: Floati
                 <Send size={11} /> Submit
               </button>
               <button
-                onClick={() => setActiveTab('requests')}
+                onClick={() => handleSwitchToRequests()}
                 className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-colors"
                 style={{
                   background: activeTab === 'requests' ? 'rgba(6,182,212,0.15)' : 'transparent',
@@ -310,21 +311,62 @@ export default function FloatingPanel({ isOpen, onClose, onOpenCapture }: Floati
               </button>
             </div>
 
-            {/* Right: minimize + close */}
-            <div className="flex items-center gap-1">
+            {/* Right: controls */}
+            <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 mr-2">
+                <div className="flex items-center gap-1 px-2 py-1 rounded-md" style={{ background: 'rgba(51,65,85,0.4)', border: '1px solid rgba(51,65,85,0.5)' }}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                  <input
+                    type="text"
+                    placeholder="Your Name"
+                    className="bg-transparent outline-none text-[10px] w-16 text-gray-300 placeholder-gray-500 font-medium"
+                    defaultValue={localStorage.getItem('devLogs_author') || ''}
+                    onBlur={(e) => {
+                      const val = e.target.value.trim();
+                      if (val) localStorage.setItem('devLogs_author', val);
+                      else localStorage.removeItem('devLogs_author');
+                    }}
+                  />
+                </div>
+              </div>
+
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('dev-logs:open-insight'))}
+                title="Open Insight Engine"
+                className="w-7 h-7 rounded-md flex items-center justify-center transition-colors"
+                style={{ color: '#94a3b8' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#a855f7'; e.currentTarget.style.background = 'rgba(168,85,247,0.1)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'transparent' }}
+              >
+                <Activity size={14} />
+              </button>
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('dev-logs:open-kanban'))}
+                title="Open Full Kanban Board"
+                className="w-7 h-7 rounded-md flex items-center justify-center transition-colors"
+                style={{ color: '#94a3b8' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#22d3ee'; e.currentTarget.style.background = 'rgba(6,182,212,0.1)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'transparent' }}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
+              </button>
               <button
                 onClick={() => setIsMinimized(!isMinimized)}
-                className="w-6 h-6 rounded-md flex items-center justify-center transition-colors hover:bg-[rgba(51,65,85,0.5)]"
-                title={isMinimized ? 'Expand' : 'Minimize'}
+                className="w-7 h-7 rounded-md flex items-center justify-center transition-colors"
+                style={{ color: '#94a3b8' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#e2e8f0'; e.currentTarget.style.background = 'rgba(255,255,255,0.05)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'transparent' }}
               >
-                <Minus size={13} color="#94a3b8" />
+                <Minus size={14} />
               </button>
               <button
                 onClick={onClose}
-                className="w-6 h-6 rounded-md flex items-center justify-center transition-colors hover:bg-[rgba(239,68,68,0.15)]"
-                title="Close"
+                className="w-7 h-7 rounded-md flex items-center justify-center transition-colors"
+                style={{ color: '#94a3b8' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'transparent' }}
               >
-                <X size={13} color="#94a3b8" />
+                <X size={14} />
               </button>
             </div>
           </div>

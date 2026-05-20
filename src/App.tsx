@@ -2,24 +2,79 @@ import { useState, useEffect } from 'react';
 import FloatingPanel from './components/FloatingPanel';
 import FloatingBugButton from './components/FloatingBugButton';
 import DevCapture from './components/DevCapture';
-import { installConsoleInterceptor } from './components/DevCapture';
+import KanbanDashboard from './components/KanbanDashboard';
+import InsightEngineLayout from './components/InsightEngineLayout';
+import MultiplayerCursors from './components/MultiplayerCursors';
+import PerformanceHUD from './components/PerformanceHUD';
+import { installConsoleInterceptor, installNetworkInterceptor } from './components/DevCapture';
 
-// Install console interceptor on load
+// Install interceptors on load
 installConsoleInterceptor();
+installNetworkInterceptor();
 
 export default function App() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [captureOpen, setCaptureOpen] = useState(false);
+  const [kanbanOpen, setKanbanOpen] = useState(false);
+  const [insightOpen, setInsightOpen] = useState(false);
+  const [showHUD, setShowHUD] = useState(localStorage.getItem('devLogs_showHUD') !== 'false');
 
-  // Listen for the custom event from FloatingBugButton (toggles panel)
+  // Listen for custom events
   useEffect(() => {
-    const handler = () => setPanelOpen((prev) => !prev);
-    window.addEventListener('dev-capture:open', handler);
-    return () => window.removeEventListener('dev-capture:open', handler);
+    const togglePanel = () => setPanelOpen((prev) => !prev);
+    const openKanban = () => {
+      setPanelOpen(false);
+      setKanbanOpen(true);
+    };
+    const openInsight = () => {
+      setPanelOpen(false);
+      setInsightOpen(true);
+    };
+    const toggleHUD = () => {
+      setShowHUD((prev) => {
+        const next = !prev;
+        localStorage.setItem('devLogs_showHUD', String(next));
+        return next;
+      });
+    };
+
+    window.addEventListener('dev-capture:open', togglePanel);
+    window.addEventListener('dev-logs:open-kanban', openKanban);
+    window.addEventListener('dev-logs:open-insight', openInsight);
+    window.addEventListener('dev-logs:toggle-hud', toggleHUD);
+
+    return () => {
+      window.removeEventListener('dev-capture:open', togglePanel);
+      window.removeEventListener('dev-logs:open-kanban', openKanban);
+      window.removeEventListener('dev-logs:open-insight', openInsight);
+      window.removeEventListener('dev-logs:toggle-hud', toggleHUD);
+    };
   }, []);
+
+  if (kanbanOpen) {
+    return (
+      <>
+        <KanbanDashboard onClose={() => setKanbanOpen(false)} />
+        <MultiplayerCursors />
+        {showHUD && <PerformanceHUD />}
+      </>
+    );
+  }
+
+  if (insightOpen) {
+    return (
+      <>
+        <InsightEngineLayout onClose={() => setInsightOpen(false)} />
+        <MultiplayerCursors />
+        {showHUD && <PerformanceHUD />}
+      </>
+    );
+  }
 
   return (
     <>
+      <MultiplayerCursors />
+      {showHUD && <PerformanceHUD />}
       {/* Floating panel */}
       <div data-dev-logs-panel>
         <FloatingPanel

@@ -83,6 +83,13 @@ export async function deleteRequest(id: string): Promise<void> {
   await request(`/requests/${id}`, { method: 'DELETE' });
 }
 
+export async function suggestFix(id: string): Promise<string> {
+  const data = await request<{ suggestion: string }>(`/requests/${id}/suggest-fix`, {
+    method: 'POST',
+  });
+  return data.suggestion;
+}
+
 // ---------- Checklist ----------
 
 export async function addChecklist(
@@ -195,6 +202,52 @@ export async function updateCompletion(
     },
   );
   return result.request;
+}
+
+// ---------- Tags ----------
+
+export async function updateTags(id: string, tags: string[]): Promise<string[]> {
+  const data = await request<{ tags: string[] }>(`/requests/${id}/tags`, {
+    method: 'PATCH',
+    body: JSON.stringify({ tags }),
+  });
+  return data.tags;
+}
+
+// ---------- Export ----------
+
+export function exportRequests(format: 'json' | 'csv' | 'markdown' = 'json'): void {
+  const a = document.createElement('a');
+  a.href = `${API_BASE}/requests/export?format=${format}`;
+  a.download = `dev-logs-export.${format === 'markdown' ? 'md' : format}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// ---------- SSE (real-time events) ----------
+
+export function subscribeToEvents(
+  onEvent: (type: string, data: unknown) => void,
+): () => void {
+  const es = new EventSource('/api/events');
+
+  const handleMessage = (e: MessageEvent) => {
+    try { onEvent('message', JSON.parse(e.data)); } catch { /* ignore */ }
+  };
+
+  for (const eventType of ['request_created', 'status_change', 'comment_added']) {
+    es.addEventListener(eventType, (e: Event) => {
+      try {
+        onEvent(eventType, JSON.parse((e as MessageEvent).data));
+      } catch { /* ignore */ }
+    });
+  }
+
+  es.addEventListener('message', handleMessage);
+  es.onerror = () => { /* silently reconnect */ };
+
+  return () => es.close();
 }
 
 // ---------- Changelog ----------

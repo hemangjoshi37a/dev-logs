@@ -53,6 +53,20 @@ export interface DevRequest {
   completion_percentage: number;
   testing_notes: string;
   feedback: string;
+  tags: string[];
+  due_date: string | null;
+  github_pr?: string;
+  git_branch?: string;
+  estimated_hours?: number;
+  actual_hours?: number;
+  environment_context?: {
+    os?: string;
+    node?: string;
+    memory_gb?: number;
+    git_branch?: string;
+    git_status?: string[];
+    dependencies?: Record<string, string>;
+  };
 }
 
 export interface Stats {

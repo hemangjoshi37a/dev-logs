@@ -93,12 +93,24 @@ interface SelectedElement {
   componentName?: string;
 }
 
+export interface NetworkEntry {
+  method: string;
+  url: string;
+  status?: number;
+  duration?: number;
+  timestamp: string;
+  response?: string;
+  requestHeaders?: Record<string, string>;
+  requestBody?: string;
+}
+
 // ---------------------------------------------------------------------------
-// Console buffer (global)
+// Console & Network buffer (global)
 // ---------------------------------------------------------------------------
 declare global {
   interface Window {
     __consoleBuffer?: ConsoleEntry[];
+    __networkBuffer?: NetworkEntry[];
   }
 }
 
@@ -132,6 +144,122 @@ export function installConsoleInterceptor() {
   };
 
   window.__consoleBuffer = buf;
+}
+
+let _networkInterceptorInstalled = false;
+export function installNetworkInterceptor() {
+  if (_networkInterceptorInstalled) return;
+  _networkInterceptorInstalled = true;
+
+  const buf: NetworkEntry[] = [];
+  const MAX = 50;
+
+  window.__networkBuffer = buf;
+
+  // Intercept fetch
+  const origFetch = window.fetch;
+  window.fetch = async (...args) => {
+    const startTime = Date.now();
+    const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request).url;
+    const method = (args[1]?.method || (args[0] instanceof Request ? args[0].method : 'GET')).toUpperCase();
+
+    if (url.includes('/api/requests') || url.includes('/api/events')) {
+      return origFetch(...args);
+    }
+
+    let requestBody = '';
+    const requestHeaders: Record<string, string> = {};
+
+    if (args[0] instanceof Request) {
+      args[0].headers.forEach((v, k) => requestHeaders[k] = v);
+    }
+    
+    if (args[1]) {
+      const init = args[1] as RequestInit;
+      if (init.headers) {
+        if (init.headers instanceof Headers) {
+          init.headers.forEach((v, k) => requestHeaders[k] = v);
+        } else if (Array.isArray(init.headers)) {
+          init.headers.forEach(([k, v]) => requestHeaders[k] = v);
+        } else {
+          Object.entries(init.headers).forEach(([k, v]) => requestHeaders[k] = v as string);
+        }
+      }
+      if (typeof init.body === 'string') {
+        requestBody = init.body;
+      }
+    }
+
+    const entry: NetworkEntry = {
+      method,
+      url,
+      timestamp: new Date().toISOString(),
+      requestHeaders,
+      requestBody,
+    };
+
+    buf.push(entry);
+    if (buf.length > MAX) buf.shift();
+
+    try {
+      const response = await origFetch(...args);
+      entry.status = response.status;
+      entry.duration = Date.now() - startTime;
+      return response;
+    } catch (err) {
+      entry.status = 0;
+      entry.duration = Date.now() - startTime;
+      entry.response = String(err);
+      throw err;
+    }
+  };
+
+  // Intercept XHR
+  const origXHR = window.XMLHttpRequest;
+  class InterceptedXHR extends origXHR {
+    private _method = 'GET';
+    private _url = '';
+    private _startTime = 0;
+    private _requestHeaders: Record<string, string> = {};
+
+    open(method: string, url: string | URL, ...rest: any[]) {
+      this._method = method.toUpperCase();
+      this._url = url.toString();
+      // @ts-ignore
+      return super.open(method, url, ...rest);
+    }
+
+    setRequestHeader(name: string, value: string) {
+      this._requestHeaders[name] = value;
+      super.setRequestHeader(name, value);
+    }
+
+    send(body?: Document | XMLHttpRequestBodyInit | null) {
+      if (this._url.includes('/api/requests') || this._url.includes('/api/events')) {
+        return super.send(body);
+      }
+
+      this._startTime = Date.now();
+      const entry: NetworkEntry = {
+        method: this._method,
+        url: this._url,
+        timestamp: new Date().toISOString(),
+        requestHeaders: this._requestHeaders,
+        requestBody: typeof body === 'string' ? body : undefined,
+      };
+
+      buf.push(entry);
+      if (buf.length > MAX) buf.shift();
+
+      this.addEventListener('loadend', () => {
+        entry.status = this.status;
+        entry.duration = Date.now() - this._startTime;
+      });
+
+      return super.send(body);
+    }
+  }
+  window.XMLHttpRequest = InterceptedXHR;
 }
 
 // ---------------------------------------------------------------------------
@@ -621,6 +749,7 @@ const DevCapture: React.FC<DevCaptureProps> = ({ open, onClose, apiUrl }) => {
         description ? `## Description\n${description}` : '',
         elementsBlock,
         consoleLogs.length > 0 ? `\n## Recent Console Logs\n\`\`\`\n${consoleLogs.map((l) => `[${l.level}] ${l.message}`).join('\n')}\n\`\`\`` : '',
+        (window.__networkBuffer || []).length > 0 ? `\n## Recent Network Requests\n\`\`\`\n${(window.__networkBuffer || []).slice(-20).map((n) => `[${n.method}] ${n.url} - ${n.status || 'FAIL'} (${n.duration || '?'}ms)`).join('\n')}\n\`\`\`` : '',
       ].filter(Boolean).join('\n');
 
       const body = {

@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Camera,
   Send,
@@ -18,9 +18,11 @@ import {
   FileText,
   Image as ImageIcon,
   File as FileIcon,
+  Video,
+  StopCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { createRequest, uploadAttachment } from '../lib/api';
+import { fetchRequests, createRequest, uploadAttachment } from '../lib/api';
 import type { Priority, Category } from '../types';
 
 interface SubmitTabProps {
@@ -102,10 +104,73 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submittedId, setSubmittedId] = useState<string | null>(null);
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<BlobPart[]>([]);
+
+  const handleRecordVideo = async () => {
+    if (isRecording) {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      recordedChunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = () => {
+        setIsRecording(false);
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+        const file = new File([blob], `screen-record-${Date.now()}.webm`, { type: 'video/webm' });
+        setFiles(prev => [...prev, file]);
+        toast.success('Video attached to files');
+      };
+
+      recorder.start();
+      mediaRecorderRef.current = recorder;
+      setIsRecording(true);
+      toast.info('Screen recording started');
+    } catch (err) {
+      console.error(err);
+      toast.error('Recording cancelled or failed');
+    }
+  };
 
   const consoleErrors = ((window as any).__consoleBuffer as ConsoleEntry[] | undefined || []).filter((e) => e.level === 'error').length;
   const consoleWarnings = ((window as any).__consoleBuffer as ConsoleEntry[] | undefined || []).filter((e) => e.level === 'warn').length;
   const pageUrl = window.location.pathname;
+
+  const { data: requests = [] } = useQuery({
+    queryKey: ['requests'],
+    queryFn: () => fetchRequests(),
+  });
+
+  const similarRequests = React.useMemo(() => {
+    if (description.trim().length < 15) return [];
+    const words = description.toLowerCase().split(/\W+/).filter(w => w.length > 4);
+    if (words.length === 0) return [];
+
+    return requests
+      .filter((req) => req.status !== 'completed' && req.status !== 'cancelled')
+      .map((req) => {
+        const text = (req.title + ' ' + req.description).toLowerCase();
+        let matches = 0;
+        words.forEach(w => { if (text.includes(w)) matches++; });
+        return { req, score: matches / words.length };
+      })
+      .filter((x) => x.score >= 0.4)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 2)
+      .map(x => x.req);
+  }, [description, requests]);
 
   const handleCapture = useCallback(async () => {
     setCapturing(true);
@@ -125,6 +190,7 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
     setSubmitting(true);
     try {
       const consoleLogs = ((window as any).__consoleBuffer as ConsoleEntry[] || []).slice(-50);
+      const networkLogs = ((window as any).__networkBuffer as any[] || []).slice(-20);
 
       // Auto-generate title from first 80 chars of description
       const autoTitle = description.trim().split('\n')[0].slice(0, 80) || 'New request';
@@ -141,6 +207,9 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
         consoleLogs.length > 0
           ? `\n**Console Logs**:\n\`\`\`\n${consoleLogs.map((l) => `[${l.level}] ${l.message}`).join('\n')}\n\`\`\``
           : '',
+        networkLogs.length > 0
+          ? `\n**Network Requests**:\n\`\`\`\n${networkLogs.map((n) => `[${n.method}] ${n.url} - ${n.status || 'FAIL'} (${n.duration || '?'}ms)`).join('\n')}\n\`\`\``
+          : '',
       ].filter(Boolean).join('\n');
 
       const body = {
@@ -148,8 +217,9 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
         description: contextBlock,
         priority,
         category: (category === 'ui-ux' ? 'ui' : category) as Category,
-        submitted_by: 'dev-capture',
+        submitted_by: localStorage.getItem('devLogs_author') || 'dev-team',
         platform: window.location.hostname,
+        tags,
       };
 
       const result = await createRequest(body);
@@ -191,7 +261,17 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
     setFiles([]);
     setPriority('medium');
     setCategory('bug');
+    setTags([]);
+    setTagInput('');
   };
+
+  const addTag = (raw: string) => {
+    const t = raw.trim().toLowerCase().replace(/^#+/, '');
+    if (t && !tags.includes(t) && tags.length < 8) setTags((prev) => [...prev, t]);
+    setTagInput('');
+  };
+
+  const removeTag = (t: string) => setTags((prev) => prev.filter((x) => x !== t));
 
   const handleFileSelect = (newFiles: FileList | null) => {
     if (!newFiles) return;
@@ -204,6 +284,7 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
 
   const getFileIcon = (file: File) => {
     if (file.type.startsWith('image/')) return ImageIcon;
+    if (file.type.startsWith('video/')) return Video;
     if (file.type.startsWith('text/') || file.name.endsWith('.log') || file.name.endsWith('.json') || file.name.endsWith('.csv')) return FileText;
     return FileIcon;
   };
@@ -264,7 +345,7 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
           )}
         </div>
 
-        {/* Screenshot & advanced capture */}
+        {/* Capture tools */}
         <div className="flex gap-1.5">
           <button
             onClick={handleCapture}
@@ -285,6 +366,23 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
               <><Camera size={13} /> Screenshot</>
             )}
           </button>
+
+          <button
+            onClick={handleRecordVideo}
+            className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-medium transition-colors"
+            style={{
+              background: isRecording ? 'rgba(239,68,68,0.1)' : 'rgba(15,23,42,0.7)',
+              border: `1px solid ${isRecording ? 'rgba(239,68,68,0.3)' : 'rgba(51,65,85,0.5)'}`,
+              color: isRecording ? '#ef4444' : '#94a3b8',
+            }}
+          >
+            {isRecording ? (
+              <><StopCircle size={13} className="animate-pulse" /> Stop Rec</>
+            ) : (
+              <><Video size={13} /> Record</>
+            )}
+          </button>
+
           <button
             onClick={onOpenCapture}
             className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors"
@@ -468,6 +566,63 @@ export default function SubmitTab({ onOpenCapture, onSwitchToRequests }: SubmitT
             })}
           </div>
         </div>
+
+        {/* Tags */}
+        <div>
+          <label className="text-[11px] font-medium mb-1.5 block" style={{ color: '#94a3b8' }}>
+            Tags <span style={{ color: '#475569' }}>(press Enter to add)</span>
+          </label>
+          <div
+            className="flex flex-wrap gap-1.5 p-2 rounded-lg min-h-[32px] items-center"
+            style={{ background: 'rgba(15,23,42,0.7)', border: '1px solid rgba(51,65,85,0.5)' }}
+          >
+            {tags.map((t) => (
+              <span
+                key={t}
+                className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full"
+                style={{ background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.25)', color: '#22d3ee' }}
+              >
+                #{t}
+                <button
+                  onClick={() => removeTag(t)}
+                  className="hover:text-red-400 transition-colors"
+                  type="button"
+                >
+                  <X size={8} />
+                </button>
+              </span>
+            ))}
+            <input
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(tagInput); }
+                if (e.key === 'Backspace' && !tagInput && tags.length > 0) removeTag(tags[tags.length - 1]);
+              }}
+              placeholder={tags.length === 0 ? 'auth, mobile, perf…' : ''}
+              className="flex-1 min-w-[80px] bg-transparent outline-none text-[11px]"
+              style={{ color: '#e2e8f0' }}
+            />
+          </div>
+        </div>
+
+        {/* Deduplication warning */}
+        {similarRequests.length > 0 && (
+          <div className="p-2.5 rounded-lg mb-2" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)' }}>
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-yellow-500 mb-1">
+              <AlertTriangle size={12} /> Possible Duplicates Found
+            </div>
+            <ul className="space-y-1">
+              {similarRequests.map(r => (
+                <li key={r.id} className="text-[10px] truncate" style={{ color: '#d97706' }}>
+                  <button onClick={() => onSwitchToRequests(r.id)} className="hover:underline text-left">
+                    {r.id}: {r.title}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       {/* Submit footer */}

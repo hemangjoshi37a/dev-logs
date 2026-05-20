@@ -1,14 +1,18 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
   Search,
-  CheckCircle2,
   FolderOpen,
+  Download,
+  ChevronDown,
+  Tag,
+  Wifi,
 } from 'lucide-react';
-import { fetchRequests, type FetchRequestsFilters } from '../lib/api';
+import { fetchRequests, exportRequests, subscribeToEvents, type FetchRequestsFilters } from '../lib/api';
 import { cn } from '../lib/utils';
 import type { DevRequest } from '../types';
+import { toast } from 'sonner';
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'All' },
@@ -38,15 +42,11 @@ export const PRIORITY_BADGE: Record<string, { label: string; className: string }
 
 function extractUserDescription(request: DevRequest): string {
   const desc = request.description;
-  // New format: user text before "---" separator
   const dashSplit = desc.split('\n---\n');
   if (dashSplit.length > 1) return dashSplit[0].trim();
-  // Old format: extract from "## Description\n" section
   const descMatch = desc.match(/## Description\n([\s\S]*?)(?:\n##|$)/);
   if (descMatch) return descMatch[1].trim();
-  // Fallback: if starts with "## Dev Capture Context", use the title
   if (desc.startsWith('## Dev Capture Context')) return request.title;
-  // Plain text
   return desc.trim();
 }
 
@@ -55,8 +55,12 @@ interface RequestListProps {
 }
 
 export default function RequestList({ onSelect }: RequestListProps) {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [tagFilter, setTagFilter] = useState('');
+  const [liveConnected, setLiveConnected] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   const filters: FetchRequestsFilters = {};
   if (statusFilter) filters.status = statusFilter;
@@ -64,14 +68,44 @@ export default function RequestList({ onSelect }: RequestListProps) {
   const { data: requests, isLoading } = useQuery({
     queryKey: ['requests', filters],
     queryFn: () => fetchRequests(filters),
+    refetchInterval: 30_000, // fallback poll every 30s
   });
+
+  // SSE: real-time updates
+  useEffect(() => {
+    const unsubscribe = subscribeToEvents((type) => {
+      if (['request_created', 'status_change', 'comment_added'].includes(type)) {
+        setLiveConnected(true);
+        queryClient.invalidateQueries({ queryKey: ['requests'] });
+        if (type === 'request_created') toast.info('New request submitted');
+        if (type === 'status_change') toast.info('A request status changed');
+      }
+    });
+    // Mark connected after first successful connection
+    setTimeout(() => setLiveConnected(true), 1500);
+    return () => {
+      unsubscribe();
+      setLiveConnected(false);
+    };
+  }, [queryClient]);
+
+  // Collect all unique tags from requests
+  const allTags = Array.from(
+    new Set((requests ?? []).flatMap((r) => r.tags ?? [])),
+  ).sort();
 
   let filtered = requests ?? [];
   if (search.trim()) {
     const q = search.toLowerCase();
     filtered = filtered.filter(
-      (r) => r.description.toLowerCase().includes(q),
+      (r) =>
+        r.title.toLowerCase().includes(q) ||
+        r.description.toLowerCase().includes(q) ||
+        (r.tags ?? []).some((t) => t.includes(q)),
     );
+  }
+  if (tagFilter) {
+    filtered = filtered.filter((r) => (r.tags ?? []).includes(tagFilter));
   }
 
   // Sort newest first
@@ -79,15 +113,21 @@ export default function RequestList({ onSelect }: RequestListProps) {
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
   );
 
+  const handleExport = (format: 'json' | 'csv' | 'markdown') => {
+    exportRequests(format);
+    setShowExportMenu(false);
+    toast.success(`Exporting as ${format.toUpperCase()}…`);
+  };
+
   return (
     <div className="flex flex-col h-full">
-      {/* Search + filter bar */}
-      <div className="flex gap-2 p-3 pb-2 flex-shrink-0">
+      {/* Header toolbar */}
+      <div className="flex gap-2 p-3 pb-1 flex-shrink-0">
         <div className="relative flex-1">
           <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: '#64748b' }} />
           <input
             type="text"
-            placeholder="Search..."
+            placeholder="Search…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-7 pr-2 py-1.5 rounded-lg text-[12px] outline-none transition-all"
@@ -100,6 +140,7 @@ export default function RequestList({ onSelect }: RequestListProps) {
             onBlur={(e) => { e.currentTarget.style.borderColor = 'rgba(51,65,85,0.5)'; }}
           />
         </div>
+
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
@@ -114,12 +155,82 @@ export default function RequestList({ onSelect }: RequestListProps) {
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
         </select>
+
+        {/* Export menu */}
+        <div className="relative">
+          <button
+            onClick={() => setShowExportMenu((v) => !v)}
+            className="h-full px-2 rounded-lg flex items-center gap-1 text-[11px] transition-colors"
+            style={{
+              background: 'rgba(15,23,42,0.7)',
+              border: '1px solid rgba(51,65,85,0.5)',
+              color: '#64748b',
+            }}
+            title="Export requests"
+          >
+            <Download size={12} />
+            <ChevronDown size={10} />
+          </button>
+          {showExportMenu && (
+            <div
+              className="absolute right-0 top-full mt-1 rounded-lg overflow-hidden z-50"
+              style={{
+                background: 'rgba(10,15,30,0.97)',
+                border: '1px solid rgba(51,65,85,0.5)',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                minWidth: 100,
+              }}
+            >
+              {(['json', 'csv', 'markdown'] as const).map((fmt) => (
+                <button
+                  key={fmt}
+                  onClick={() => handleExport(fmt)}
+                  className="w-full px-3 py-2 text-left text-[11px] transition-colors"
+                  style={{ color: '#94a3b8' }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(6,182,212,0.08)'; e.currentTarget.style.color = '#22d3ee'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94a3b8'; }}
+                >
+                  {fmt === 'markdown' ? 'Markdown' : fmt.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Count */}
-      <div className="px-3 pb-2 flex-shrink-0">
+      {/* Tags filter row */}
+      {allTags.length > 0 && (
+        <div className="flex gap-1.5 px-3 pb-2 flex-shrink-0 flex-wrap">
+          <Tag size={10} style={{ color: '#475569', marginTop: 3, flexShrink: 0 }} />
+          {allTags.map((tag) => (
+            <button
+              key={tag}
+              onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
+              className="text-[9px] px-2 py-0.5 rounded-full transition-all"
+              style={{
+                background: tagFilter === tag ? 'rgba(6,182,212,0.15)' : 'rgba(15,23,42,0.5)',
+                border: `1px solid ${tagFilter === tag ? 'rgba(6,182,212,0.4)' : 'rgba(51,65,85,0.4)'}`,
+                color: tagFilter === tag ? '#22d3ee' : '#64748b',
+              }}
+            >
+              #{tag}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Count + live indicator */}
+      <div className="px-3 pb-2 flex-shrink-0 flex items-center justify-between">
         <span className="text-[10px]" style={{ color: '#64748b' }}>
           {filtered.length} request{filtered.length !== 1 ? 's' : ''}
+        </span>
+        <span
+          className="text-[9px] flex items-center gap-1"
+          style={{ color: liveConnected ? '#22c55e' : '#475569' }}
+          title={liveConnected ? 'Live updates active' : 'Connecting…'}
+        >
+          <Wifi size={9} />
+          {liveConnected ? 'Live' : '…'}
         </span>
       </div>
 
@@ -157,8 +268,13 @@ function CompactRequestCard({
 }) {
   const statusBadge = STATUS_BADGE[request.status] ?? STATUS_BADGE.submitted;
   const priorityBadge = PRIORITY_BADGE[request.priority] ?? PRIORITY_BADGE.medium;
-  const checklistTotal = request.checklist?.length ?? 0;
-  const checklistDone = request.checklist?.filter((c) => c.checked).length ?? 0;
+
+  // Overdue detection
+  const isOverdue =
+    request.due_date &&
+    request.status !== 'completed' &&
+    request.status !== 'cancelled' &&
+    new Date(request.due_date) < new Date();
 
   return (
     <motion.div
@@ -169,16 +285,14 @@ function CompactRequestCard({
       className="rounded-lg p-3 cursor-pointer transition-all duration-150"
       style={{
         background: 'rgba(15,23,42,0.4)',
-        border: '1px solid rgba(51,65,85,0.3)',
+        border: `1px solid ${isOverdue ? 'rgba(239,68,68,0.25)' : 'rgba(51,65,85,0.3)'}`,
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'rgba(6,182,212,0.2)'; e.currentTarget.style.background = 'rgba(15,23,42,0.6)'; }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'rgba(51,65,85,0.3)'; e.currentTarget.style.background = 'rgba(15,23,42,0.4)'; }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = isOverdue ? 'rgba(239,68,68,0.4)' : 'rgba(6,182,212,0.2)'; e.currentTarget.style.background = 'rgba(15,23,42,0.6)'; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = isOverdue ? 'rgba(239,68,68,0.25)' : 'rgba(51,65,85,0.3)'; e.currentTarget.style.background = 'rgba(15,23,42,0.4)'; }}
     >
-      {/* Description preview — first 2 lines */}
       <div className="text-[12px] mb-1.5 leading-relaxed" style={{ color: '#e2e8f0', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
         {extractUserDescription(request) || request.title}
       </div>
-      {/* Badges row */}
       <div className="flex flex-wrap items-center gap-1.5">
         <span className={cn('text-[9px] font-medium px-1.5 py-0.5 rounded border', priorityBadge.className)}>
           {priorityBadge.label}
@@ -189,7 +303,19 @@ function CompactRequestCard({
         <span className={cn('text-[9px] font-medium px-1.5 py-0.5 rounded border', statusBadge.className)}>
           {statusBadge.label}
         </span>
-        <span className="text-[9px] ml-auto" style={{ color: '#475569' }}>
+        {/* Tags */}
+        {(request.tags ?? []).slice(0, 2).map((tag) => (
+          <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded" style={{ color: '#22d3ee', background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.15)' }}>
+            #{tag}
+          </span>
+        ))}
+        {(request.tags ?? []).length > 2 && (
+          <span className="text-[9px]" style={{ color: '#475569' }}>+{(request.tags ?? []).length - 2}</span>
+        )}
+        {isOverdue && (
+          <span className="text-[9px] ml-auto" style={{ color: '#ef4444' }}>⚠ Overdue</span>
+        )}
+        <span className={cn('text-[9px]', !isOverdue && 'ml-auto')} style={{ color: '#475569' }}>
           {new Date(request.created_at).toLocaleDateString()}
         </span>
       </div>
